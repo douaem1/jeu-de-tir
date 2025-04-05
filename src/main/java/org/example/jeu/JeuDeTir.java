@@ -1,3 +1,4 @@
+
 package org.example.jeu;
 
 import javafx.application.Application;
@@ -15,6 +16,8 @@ import javafx.stage.Stage;
 import javafx.animation.*;
 import javafx.util.Duration;
 import java.io.InputStream;
+import javafx.scene.input.KeyCode;
+import javafx.scene.Node;
 
 public class JeuDeTir extends Application {
     private Stage primaryStage;
@@ -25,6 +28,8 @@ public class JeuDeTir extends Application {
     private static final String COLOR_SECONDARY = "#F18F01";
     private static final String COLOR_ACCENT = "#A23B72";
     private static final String COLOR_DANGER = "#C73E1D";
+    private int score = 0;
+    private int lives = 3;
 
     @Override
     public void start(Stage primaryStage) {
@@ -63,7 +68,7 @@ public class JeuDeTir extends Application {
 
     private ImageView loadBackgroundImage() {
         try {
-            String[] paths = {"/background.jpg", "/background.png", "/img.jpg", "/img.png", "/image.jpg", "/image.png"};
+            String[] paths = {"/img.jpg"};
             for (String path : paths) {
                 InputStream is = getClass().getResourceAsStream(path);
                 if (is != null) {
@@ -114,7 +119,8 @@ public class JeuDeTir extends Application {
         rect.setFill(new RadialGradient(0, 0, 0.5, 0.5, 0.8, true, CycleMethod.NO_CYCLE,
                 new Stop(0, Color.web("#1a2a6c")),
                 new Stop(0.5, Color.web("#b21f1f")),
-                new Stop(1, Color.web("#fdbb2d"))));
+                new Stop(1, Color.web("#fdbb2d")))
+        );
         return new ImageView(rect.snapshot(null, null));
     }
 
@@ -198,18 +204,13 @@ public class JeuDeTir extends Application {
         );
         colorTimeline.setCycleCount(Animation.INDEFINITE);
 
-        RotateTransition rotateTransition = new RotateTransition(Duration.seconds(6), label);
-        rotateTransition.setByAngle(2);
-        rotateTransition.setCycleCount(Animation.INDEFINITE);
-        rotateTransition.setAutoReverse(true);
-
-        new ParallelTransition(glowTimeline, colorTimeline, rotateTransition).play();
+        new ParallelTransition(glowTimeline, colorTimeline).play();
     }
 
     private Label createSubtitleLabel() {
         Label label = new Label("Only the Fastest Survive the Sky");
-        label.setFont(Font.font("Bank Gothic", FontWeight.SEMI_BOLD, 26));
-        label.setTextFill(Color.web("#CCCCCC"));
+        label.setFont(Font.font("Bank Gothic", FontWeight.SEMI_BOLD, 35));
+        label.setTextFill(Color.web("white", 1.0));
 
         FadeTransition fade = new FadeTransition(Duration.seconds(3), label);
         fade.setFromValue(0.7);
@@ -217,7 +218,7 @@ public class JeuDeTir extends Application {
         fade.setCycleCount(Animation.INDEFINITE);
         fade.setAutoReverse(true);
 
-        ScaleTransition scale = new ScaleTransition(Duration.seconds(4), label);
+        ScaleTransition scale = new ScaleTransition(Duration.seconds(2), label);
         scale.setFromX(0.98);
         scale.setFromY(0.98);
         scale.setToX(1.02);
@@ -234,10 +235,10 @@ public class JeuDeTir extends Application {
         buttonBox.setAlignment(Pos.CENTER);
         buttonBox.setFillWidth(true);
 
-        Button startBtn = createActionButton("GUEST", COLOR_PRIMARY);
+        Button startBtn = createActionButton("START AS A GUEST", COLOR_PRIMARY);
         Button signUpBtn = createActionButton("SIGN UP", COLOR_ACCENT);
         Button signInBtn = createActionButton("SIGN IN", COLOR_SECONDARY);
-        Button quitBtn = createActionButton("QUITTER", COLOR_DANGER);
+        Button quitBtn = createActionButton("EXIT", COLOR_DANGER);
 
         startBtn.setPrefSize(300, 60);
         signUpBtn.setPrefSize(300, 60);
@@ -251,12 +252,12 @@ public class JeuDeTir extends Application {
 
         startBtn.setOnAction(e -> {
             playButtonPressAnimation(startBtn);
-            showNotification("Initialisation du système...");
+            transitionToScene(() -> startGame());
         });
 
         signUpBtn.setOnAction(e -> {
             playButtonPressAnimation(signUpBtn);
-            transitionToScene(() -> ShowSignUpScene());
+            transitionToScene(() -> showSignUpScene());
         });
 
         signInBtn.setOnAction(e -> {
@@ -429,114 +430,145 @@ public class JeuDeTir extends Application {
         ).play();
     }
 
-    public void showSignInScene() {
+    private void showSignInScene() {
         VBox loginBox = new VBox(20);
         loginBox.setAlignment(Pos.CENTER);
         loginBox.setPadding(new Insets(40));
         loginBox.setMaxWidth(500);
-        loginBox.setStyle("-fx-background-color: rgba(10, 10, 30, 0.8); -fx-background-radius: 15;");
+        loginBox.setStyle("-fx-background-color: rgba(10, 10, 30, 0.7); -fx-background-radius: 15;");
 
-        Label title = new Label("Connexion");
-        title.setFont(Font.font("Arial", FontWeight.BOLD, 32));
-        title.setTextFill(Color.web(COLOR_PRIMARY));
+        StackPane root = new StackPane();
+        ImageView background = loadBackgroundImage("/img.jpg");
+        setupBackgroundImage(background);
+        animateBackground(background);
+        root.getChildren().add(background);
 
-        TextField usernameField = createStylizedTextField("Nom d'utilisateur");
-        PasswordField passwordField = createStylizedPasswordField("Mot de passe");
+        Rectangle overlay = new Rectangle(WINDOW_WIDTH, WINDOW_HEIGHT);
+        overlay.setFill(new LinearGradient(0, 0, 0, 1, true, CycleMethod.NO_CYCLE,
+                new Stop(0, Color.TRANSPARENT),
+                new Stop(0.3, Color.rgb(0, 0, 0, 0.5)),
+                new Stop(1, Color.rgb(0, 0, 0, 0.7))
+        ));
+        root.getChildren().add(overlay);
 
-        Button loginBtn = createActionButton("Se connecter", COLOR_PRIMARY);
+        Label title = new Label("SIGN IN");
+        title.setFont(Font.font("Agency FB", FontWeight.EXTRA_BOLD, 46));
+        title.setTextFill(Color.WHITE);
+
+        DropShadow glow = new DropShadow(15, Color.web(COLOR_PRIMARY));
+        glow.setSpread(0.3);
+        Bloom bloom = new Bloom(0.3);
+        title.setEffect(new Blend(BlendMode.SCREEN, bloom, glow));
+        animateTextGlow(title, glow);
+
+        TextField usernameField = createStylizedTextField("Username");
+        PasswordField passwordField = createStylizedPasswordField("Password");
+
+        Button loginBtn = createActionButton("SIGN IN", COLOR_PRIMARY);
         loginBtn.setPrefWidth(200);
-        loginBtn.setOnAction(e -> {
-            playButtonPressAnimation(loginBtn);
-            transitionToScene(() -> {
-                setupMainMenu();
-                showNotification("Connexion réussie !");
-            });
-        });
 
-        Button backBtn = createActionButton("Retour", "gray");
+        Button backBtn = createActionButton("Return", "gray");
         backBtn.setPrefWidth(200);
+
         backBtn.setOnAction(e -> {
             playButtonPressAnimation(backBtn);
-            transitionToScene(this::setupMainMenu);
+            transitionToScene(() -> setupMainMenu());
         });
 
         loginBox.getChildren().addAll(title, usernameField, passwordField, loginBtn, backBtn);
 
         loginBox.setOpacity(0);
         loginBox.setTranslateY(20);
-
-        StackPane root = createAnimatedBackground();
         root.getChildren().add(loginBox);
 
         Scene loginScene = new Scene(root, WINDOW_WIDTH, WINDOW_HEIGHT);
         primaryStage.setScene(loginScene);
 
-        FadeTransition fade = new FadeTransition(Duration.seconds(0.8), loginBox);
-        fade.setToValue(1);
-
-        TranslateTransition slide = new TranslateTransition(Duration.seconds(0.6), loginBox);
-        slide.setToY(0);
-
-        new ParallelTransition(fade, slide).play();
+        animateFormEntrance(loginBox);
     }
 
-    public void ShowSignUpScene() {
+    private void showSignUpScene() {
         VBox signupBox = new VBox(20);
         signupBox.setAlignment(Pos.CENTER);
         signupBox.setPadding(new Insets(40));
         signupBox.setMaxWidth(500);
-        signupBox.setStyle("-fx-background-color: rgba(10, 10, 30, 0.8); -fx-background-radius: 15;");
-        Image backgroundImage = new Image("file:src/assets/images/space-bg.jpg"); // mets le bon chemin ici
-        BackgroundImage bg = new BackgroundImage(
-                backgroundImage,
-                BackgroundRepeat.NO_REPEAT,
-                BackgroundRepeat.NO_REPEAT,
-                BackgroundPosition.CENTER,
-                new BackgroundSize(100, 100, true, true, true, false)
-        );
+        signupBox.setStyle("-fx-background-color: rgba(10, 10, 30, 0.7); -fx-background-radius: 15;");
+
+        StackPane root = new StackPane();
+        ImageView background = loadBackgroundImage("/img.jpg");
+        setupBackgroundImage(background);
+        animateBackground(background);
+        root.getChildren().add(background);
+
+        Rectangle overlay = new Rectangle(WINDOW_WIDTH, WINDOW_HEIGHT);
+        overlay.setFill(new LinearGradient(0, 0, 0, 1, true, CycleMethod.NO_CYCLE,
+                new Stop(0, Color.TRANSPARENT),
+                new Stop(0.3, Color.rgb(0, 0, 0, 0.5)),
+                new Stop(1, Color.rgb(0, 0, 0, 0.7))
+        ));
+        root.getChildren().add(overlay);
+
         Label title = new Label("SIGN UP");
-        title.setFont(Font.font("Arial", FontWeight.BOLD, 32));
-        title.setTextFill(Color.web(COLOR_ACCENT));
+        title.setFont(Font.font("Agency FB", FontWeight.EXTRA_BOLD, 46));
+        title.setTextFill(Color.WHITE);
+
+        DropShadow glow = new DropShadow(15, Color.web(COLOR_ACCENT));
+        glow.setSpread(0.3);
+        Bloom bloom = new Bloom(0.3);
+        title.setEffect(new Blend(BlendMode.SCREEN, bloom, glow));
+        animateTextGlow(title, glow);
 
         TextField usernameField = createStylizedTextField("Enter your Username");
         PasswordField passwordField = createStylizedPasswordField("Enter your Password");
         PasswordField passwordField1 = createStylizedPasswordField("Confirm your Password");
 
-        Button signupBtn = createActionButton("Sign Up", COLOR_ACCENT);
+        Button signupBtn = createActionButton("SIGN UP", COLOR_ACCENT);
         signupBtn.setPrefWidth(200);
-        signupBtn.setOnAction(e -> {
-            playButtonPressAnimation(signupBtn);
-            transitionToScene(() -> {
-                setupMainMenu();
-                showNotification("Inscription réussie !");
-            });
-        });
 
         Button backBtn = createActionButton("Return", "gray");
         backBtn.setPrefWidth(200);
+
         backBtn.setOnAction(e -> {
             playButtonPressAnimation(backBtn);
-            transitionToScene(this::setupMainMenu);
+            transitionToScene(() -> setupMainMenu());
         });
 
         signupBox.getChildren().addAll(title, usernameField, passwordField, passwordField1, signupBtn, backBtn);
 
         signupBox.setOpacity(0);
         signupBox.setTranslateY(20);
-
-        StackPane root = createAnimatedBackground();
         root.getChildren().add(signupBox);
 
         Scene signupScene = new Scene(root, WINDOW_WIDTH, WINDOW_HEIGHT);
         primaryStage.setScene(signupScene);
 
-        FadeTransition fade = new FadeTransition(Duration.seconds(0.8), signupBox);
+        animateFormEntrance(signupBox);
+    }
+
+    private ImageView loadBackgroundImage(String... paths) {
+        try {
+            for (String path : paths) {
+                InputStream is = getClass().getResourceAsStream(path);
+                if (is != null) {
+                    Image image = new Image(is);
+                    return new ImageView(image);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Erreur de chargement de l'image de fond: " + e.getMessage());
+        }
+        return createDefaultBackground();
+    }
+
+    private void animateFormEntrance(VBox form) {
+        FadeTransition fade = new FadeTransition(Duration.seconds(0.8), form);
         fade.setToValue(1);
 
-        TranslateTransition slide = new TranslateTransition(Duration.seconds(0.6), signupBox);
+        TranslateTransition slide = new TranslateTransition(Duration.seconds(0.6), form);
         slide.setToY(0);
 
-        new ParallelTransition(fade, slide).play();
+        ParallelTransition parallel = new ParallelTransition(fade, slide);
+        parallel.play();
     }
 
     private TextField createStylizedTextField(String promptText) {
@@ -599,6 +631,238 @@ public class JeuDeTir extends Application {
 
         background.getChildren().add(particleLayer);
         return background;
+    }
+    private void startGame() {
+        Pane gamePane = new Pane();
+        gamePane.setPrefSize(WINDOW_WIDTH, WINDOW_HEIGHT);
+
+        ImageView gameBackground = loadBackgroundImage("/img.jpg");
+        setupBackgroundImage(gameBackground);
+        animateBackground(gameBackground);
+
+        Rectangle overlay = new Rectangle(WINDOW_WIDTH, WINDOW_HEIGHT);
+        overlay.setFill(new LinearGradient(0, 0, 0, 1, true, CycleMethod.NO_CYCLE,
+                new Stop(0, Color.TRANSPARENT),
+                new Stop(1, Color.rgb(0, 0, 0, 0.3))
+        ));
+
+        gamePane.getChildren().addAll(gameBackground, overlay);
+
+        ImageView player = createPlayerAirplane();
+        gamePane.getChildren().add(player);
+
+        HUD hud = new HUD();
+        gamePane.getChildren().add(hud);
+        StackPane.setAlignment(hud, Pos.TOP_LEFT);
+
+        setupPlayerMovement(gamePane, player);
+        setupShootingMechanics(gamePane, player, hud);
+        setupEnemySpawning(gamePane, hud);
+
+        Scene gameScene = new Scene(gamePane, WINDOW_WIDTH, WINDOW_HEIGHT);
+        gameScene.setOnMouseClicked(event -> gamePane.requestFocus());
+        primaryStage.setScene(gameScene);
+        gamePane.requestFocus();
+    }
+
+    private ImageView createPlayerAirplane() {
+        try {
+            InputStream is = getClass().getResourceAsStream("/airplane.png");
+            Image image = new Image(is);
+            ImageView airplane = new ImageView(image);
+            airplane.setFitWidth(80);
+            airplane.setFitHeight(60);
+            airplane.setPreserveRatio(true);
+            airplane.setX(WINDOW_WIDTH / 2 - 40);
+            airplane.setY(WINDOW_HEIGHT - 100);
+            return airplane;
+        } catch (Exception e) {
+            Polygon airplane = new Polygon(0.0, 20.0, 15.0, 0.0, 30.0, 20.0, 25.0, 20.0, 25.0, 40.0, 5.0, 40.0, 5.0, 20.0);
+            airplane.setFill(Color.BLUE);
+            airplane.setStroke(Color.WHITE);
+            airplane.setLayoutX(WINDOW_WIDTH / 2 - 15);
+            airplane.setLayoutY(WINDOW_HEIGHT - 100);
+            return new ImageView(airplane.snapshot(null, null));
+        }
+    }
+
+    private void setupPlayerMovement(Pane gamePane, ImageView player) {
+        gamePane.setOnKeyPressed(e -> {
+            double speed = 8;
+            switch (e.getCode()) {
+                case LEFT: if (player.getX() > 0) player.setX(player.getX() - speed); break;
+                case RIGHT: if (player.getX() < WINDOW_WIDTH - player.getFitWidth()) player.setX(player.getX() + speed); break;
+                case UP: if (player.getY() > WINDOW_HEIGHT / 2) player.setY(player.getY() - speed); break;
+                case DOWN: if (player.getY() < WINDOW_HEIGHT - player.getFitHeight()) player.setY(player.getY() + speed); break;
+            }
+        });
+    }
+
+    private void setupShootingMechanics(Pane gamePane, ImageView player, HUD hud) {
+        gamePane.setOnKeyPressed(e -> {
+            if (e.getCode() == KeyCode.SPACE) {
+                Rectangle bullet = new Rectangle(4, 15, Color.YELLOW);
+                bullet.setX(player.getX() + player.getFitWidth() / 2 - 2);
+                bullet.setY(player.getY());
+                gamePane.getChildren().add(bullet);
+
+                Timeline bulletMovement = new Timeline(
+                        new KeyFrame(Duration.millis(16), event -> {
+                            bullet.setY(bullet.getY() - 10);
+                            checkCollisions(gamePane, bullet, hud);
+                            if (bullet.getY() < 0) {
+                                gamePane.getChildren().remove(bullet);
+                                ((Timeline)event.getSource()).stop();
+                            }
+                        })
+                );
+                bulletMovement.setCycleCount(Animation.INDEFINITE);
+                bulletMovement.play();
+            }
+        });
+    }
+
+    private void setupEnemySpawning(Pane gamePane, HUD hud) {
+        Timeline enemySpawner = new Timeline(
+                new KeyFrame(Duration.seconds(2), event -> {
+                    ImageView enemy = createEnemyAirplane();
+                    gamePane.getChildren().add(enemy);
+
+                    Timeline enemyMovement = new Timeline(
+                            new KeyFrame(Duration.millis(16), e -> {
+                                enemy.setY(enemy.getY() + 3);
+                                checkPlayerCollision(gamePane, enemy, hud);
+                                if (enemy.getY() > WINDOW_HEIGHT) {
+                                    gamePane.getChildren().remove(enemy);
+                                    ((Timeline)e.getSource()).stop();
+                                }
+                            })
+                    );
+                    enemyMovement.setCycleCount(Animation.INDEFINITE);
+                    enemyMovement.play();
+                })
+        );
+        enemySpawner.setCycleCount(Animation.INDEFINITE);
+        enemySpawner.play();
+    }
+
+    private ImageView createEnemyAirplane() {
+        try {
+            InputStream is = getClass().getResourceAsStream("/enemy_airplane.png");
+            Image image = new Image(is);
+            ImageView enemy = new ImageView(image);
+            enemy.setFitWidth(60);
+            enemy.setFitHeight(45);
+            enemy.setPreserveRatio(true);
+            enemy.setX(Math.random() * (WINDOW_WIDTH - 60));
+            enemy.setY(-60);
+            return enemy;
+        } catch (Exception e) {
+            Polygon enemy = new Polygon(0.0, 0.0, 15.0, 20.0, 30.0, 0.0, 25.0, 0.0, 25.0, -20.0, 5.0, -20.0, 5.0, 0.0);
+            enemy.setFill(Color.RED);
+            enemy.setStroke(Color.WHITE);
+            enemy.setLayoutX(Math.random() * (WINDOW_WIDTH - 30));
+            enemy.setLayoutY(-30);
+            return new ImageView(enemy.snapshot(null, null));
+        }
+    }
+
+    private void checkCollisions(Pane gamePane, Rectangle bullet, HUD hud) {
+        for (Node node : gamePane.getChildren()) {
+            if (node instanceof ImageView && node != gamePane.getChildren().get(0)) {
+                ImageView enemy = (ImageView) node;
+                if (bullet.getBoundsInParent().intersects(enemy.getBoundsInParent())) {
+                    gamePane.getChildren().removeAll(bullet, enemy);
+                    score += 10;
+                    ((Label)hud.getChildren().get(0)).setText("Score: " + score);
+                    createExplosion(gamePane, enemy.getX(), enemy.getY());
+                    return;
+                }
+            }
+        }
+    }
+
+    private void checkPlayerCollision(Pane gamePane, ImageView enemy, HUD hud) {
+        ImageView player = (ImageView) gamePane.getChildren().get(2); // Index du joueur
+        if (enemy.getBoundsInParent().intersects(player.getBoundsInParent())) {
+            gamePane.getChildren().remove(enemy);
+            lives--;
+            ((Label)hud.getChildren().get(1)).setText("Lives: " + lives);
+            createExplosion(gamePane, player.getX(), player.getY());
+            if (lives <= 0) gameOver(gamePane);
+        }
+    }
+
+    private void createExplosion(Pane gamePane, double x, double y) {
+        Circle explosion = new Circle(0, Color.ORANGE);
+        explosion.setCenterX(x + 30);
+        explosion.setCenterY(y + 30);
+        explosion.setEffect(new Glow(0.8));
+        gamePane.getChildren().add(explosion);
+
+        Timeline explosionAnim = new Timeline(
+                new KeyFrame(Duration.ZERO, new KeyValue(explosion.radiusProperty(), 0)),
+                new KeyFrame(Duration.millis(200), new KeyValue(explosion.radiusProperty(), 30)),
+                new KeyFrame(Duration.millis(400), new KeyValue(explosion.radiusProperty(), 50)),
+                new KeyFrame(Duration.millis(600), new KeyValue(explosion.opacityProperty(), 0))
+        );
+        explosionAnim.setOnFinished(e -> gamePane.getChildren().remove(explosion));
+        explosionAnim.play();
+    }
+
+    private void gameOver(Pane gamePane) {
+        VBox gameOverBox = new VBox(20);
+        gameOverBox.setAlignment(Pos.CENTER);
+        gameOverBox.setStyle("-fx-background-color: rgba(0,0,0,0.8); -fx-background-radius: 15;");
+        gameOverBox.setPadding(new Insets(40));
+
+        Label title = new Label("GAME OVER");
+        title.setFont(Font.font("Agency FB", FontWeight.EXTRA_BOLD, 56));
+        title.setTextFill(Color.WHITE);
+
+        Label scoreLabel = new Label("Final Score: " + score);
+        scoreLabel.setFont(Font.font("Arial", FontWeight.BOLD, 24));
+        scoreLabel.setTextFill(Color.WHITE);
+
+        Button restartBtn = createActionButton("PLAY AGAIN", COLOR_PRIMARY);
+        Button menuBtn = createActionButton("MAIN MENU", COLOR_SECONDARY);
+
+        restartBtn.setOnAction(e -> {
+            score = 0;
+            lives = 3;
+            transitionToScene(() -> startGame());
+        });
+
+        menuBtn.setOnAction(e -> {
+            score = 0;
+            lives = 3;
+            transitionToScene(() -> setupMainMenu());
+        });
+
+        gameOverBox.getChildren().addAll(title, scoreLabel, restartBtn, menuBtn);
+        gameOverBox.setOpacity(0);
+        gamePane.getChildren().add(gameOverBox);
+
+        FadeTransition fadeIn = new FadeTransition(Duration.seconds(0.8), gameOverBox);
+        fadeIn.setToValue(1);
+        fadeIn.play();
+    }
+    class HUD extends HBox {
+        public HUD() {
+            setStyle("-fx-background-color: rgba(0,0,0,0.5);");
+            setPadding(new Insets(10));
+            setSpacing(20);
+
+            Label scoreLabel = new Label("Score: 0");
+            scoreLabel.setTextFill(Color.WHITE);
+            scoreLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
+
+            Label livesLabel = new Label("Lives: 3");
+            livesLabel.setTextFill(Color.WHITE);
+            livesLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
+
+            getChildren().addAll(scoreLabel, livesLabel);
+        }
     }
 
     public static void main(String[] args) {
