@@ -63,7 +63,7 @@ public class JeuDeTir extends Application {
 
     private ImageView loadBackgroundImage() {
         try {
-            String[] paths = {"/background.jpg", "/background.png", "/img.jpg", "/img.png", "/image.jpg", "/image.png"};
+            String[] paths = {"/img.jpg"};
             for (String path : paths) {
                 InputStream is = getClass().getResourceAsStream(path);
                 if (is != null) {
@@ -114,7 +114,8 @@ public class JeuDeTir extends Application {
         rect.setFill(new RadialGradient(0, 0, 0.5, 0.5, 0.8, true, CycleMethod.NO_CYCLE,
                 new Stop(0, Color.web("#1a2a6c")),
                 new Stop(0.5, Color.web("#b21f1f")),
-                new Stop(1, Color.web("#fdbb2d"))));
+                new Stop(1, Color.web("#fdbb2d")))
+        );
         return new ImageView(rect.snapshot(null, null));
     }
 
@@ -198,18 +199,13 @@ public class JeuDeTir extends Application {
         );
         colorTimeline.setCycleCount(Animation.INDEFINITE);
 
-        RotateTransition rotateTransition = new RotateTransition(Duration.seconds(6), label);
-        rotateTransition.setByAngle(2);
-        rotateTransition.setCycleCount(Animation.INDEFINITE);
-        rotateTransition.setAutoReverse(true);
-
-        new ParallelTransition(glowTimeline, colorTimeline, rotateTransition).play();
+        new ParallelTransition(glowTimeline, colorTimeline).play();
     }
 
     private Label createSubtitleLabel() {
         Label label = new Label("Only the Fastest Survive the Sky");
-        label.setFont(Font.font("Bank Gothic", FontWeight.SEMI_BOLD, 26));
-        label.setTextFill(Color.web("#CCCCCC"));
+        label.setFont(Font.font("Bank Gothic", FontWeight.SEMI_BOLD, 35));
+        label.setTextFill(Color.web("white", 1.0));
 
         FadeTransition fade = new FadeTransition(Duration.seconds(3), label);
         fade.setFromValue(0.7);
@@ -217,7 +213,7 @@ public class JeuDeTir extends Application {
         fade.setCycleCount(Animation.INDEFINITE);
         fade.setAutoReverse(true);
 
-        ScaleTransition scale = new ScaleTransition(Duration.seconds(4), label);
+        ScaleTransition scale = new ScaleTransition(Duration.seconds(2), label);
         scale.setFromX(0.98);
         scale.setFromY(0.98);
         scale.setToX(1.02);
@@ -234,10 +230,10 @@ public class JeuDeTir extends Application {
         buttonBox.setAlignment(Pos.CENTER);
         buttonBox.setFillWidth(true);
 
-        Button startBtn = createActionButton("GUEST", COLOR_PRIMARY);
+        Button startBtn = createActionButton("START AS A GUEST", COLOR_PRIMARY);
         Button signUpBtn = createActionButton("SIGN UP", COLOR_ACCENT);
         Button signInBtn = createActionButton("SIGN IN", COLOR_SECONDARY);
-        Button quitBtn = createActionButton("QUITTER", COLOR_DANGER);
+        Button quitBtn = createActionButton("EXIT", COLOR_DANGER);
 
         startBtn.setPrefSize(300, 60);
         signUpBtn.setPrefSize(300, 60);
@@ -256,7 +252,7 @@ public class JeuDeTir extends Application {
 
         signUpBtn.setOnAction(e -> {
             playButtonPressAnimation(signUpBtn);
-            transitionToScene(() -> ShowSignUpScene());
+            transitionToScene(() -> showSignUpScene());
         });
 
         signInBtn.setOnAction(e -> {
@@ -429,114 +425,145 @@ public class JeuDeTir extends Application {
         ).play();
     }
 
-    public void showSignInScene() {
+    private void showSignInScene() {
         VBox loginBox = new VBox(20);
         loginBox.setAlignment(Pos.CENTER);
         loginBox.setPadding(new Insets(40));
         loginBox.setMaxWidth(500);
-        loginBox.setStyle("-fx-background-color: rgba(10, 10, 30, 0.8); -fx-background-radius: 15;");
+        loginBox.setStyle("-fx-background-color: rgba(10, 10, 30, 0.7); -fx-background-radius: 15;");
 
-        Label title = new Label("Connexion");
-        title.setFont(Font.font("Arial", FontWeight.BOLD, 32));
-        title.setTextFill(Color.web(COLOR_PRIMARY));
+        StackPane root = new StackPane();
+        ImageView background = loadBackgroundImage("/img.jpg");
+        setupBackgroundImage(background);
+        animateBackground(background);
+        root.getChildren().add(background);
 
-        TextField usernameField = createStylizedTextField("Nom d'utilisateur");
-        PasswordField passwordField = createStylizedPasswordField("Mot de passe");
+        Rectangle overlay = new Rectangle(WINDOW_WIDTH, WINDOW_HEIGHT);
+        overlay.setFill(new LinearGradient(0, 0, 0, 1, true, CycleMethod.NO_CYCLE,
+                new Stop(0, Color.TRANSPARENT),
+                new Stop(0.3, Color.rgb(0, 0, 0, 0.5)),
+                new Stop(1, Color.rgb(0, 0, 0, 0.7))
+        ));
+        root.getChildren().add(overlay);
 
-        Button loginBtn = createActionButton("Se connecter", COLOR_PRIMARY);
+        Label title = new Label("SIGN IN");
+        title.setFont(Font.font("Agency FB", FontWeight.EXTRA_BOLD, 46));
+        title.setTextFill(Color.WHITE);
+
+        DropShadow glow = new DropShadow(15, Color.web(COLOR_PRIMARY));
+        glow.setSpread(0.3);
+        Bloom bloom = new Bloom(0.3);
+        title.setEffect(new Blend(BlendMode.SCREEN, bloom, glow));
+        animateTextGlow(title, glow);
+
+        TextField usernameField = createStylizedTextField("Username");
+        PasswordField passwordField = createStylizedPasswordField("Password");
+
+        Button loginBtn = createActionButton("SIGN IN", COLOR_PRIMARY);
         loginBtn.setPrefWidth(200);
-        loginBtn.setOnAction(e -> {
-            playButtonPressAnimation(loginBtn);
-            transitionToScene(() -> {
-                setupMainMenu();
-                showNotification("Connexion réussie !");
-            });
-        });
 
-        Button backBtn = createActionButton("Retour", "gray");
+        Button backBtn = createActionButton("Return", "gray");
         backBtn.setPrefWidth(200);
+
         backBtn.setOnAction(e -> {
             playButtonPressAnimation(backBtn);
-            transitionToScene(this::setupMainMenu);
+            transitionToScene(() -> setupMainMenu());
         });
 
         loginBox.getChildren().addAll(title, usernameField, passwordField, loginBtn, backBtn);
 
         loginBox.setOpacity(0);
         loginBox.setTranslateY(20);
-
-        StackPane root = createAnimatedBackground();
         root.getChildren().add(loginBox);
 
         Scene loginScene = new Scene(root, WINDOW_WIDTH, WINDOW_HEIGHT);
         primaryStage.setScene(loginScene);
 
-        FadeTransition fade = new FadeTransition(Duration.seconds(0.8), loginBox);
-        fade.setToValue(1);
-
-        TranslateTransition slide = new TranslateTransition(Duration.seconds(0.6), loginBox);
-        slide.setToY(0);
-
-        new ParallelTransition(fade, slide).play();
+        animateFormEntrance(loginBox);
     }
 
-    public void ShowSignUpScene() {
+    private void showSignUpScene() {
         VBox signupBox = new VBox(20);
         signupBox.setAlignment(Pos.CENTER);
         signupBox.setPadding(new Insets(40));
         signupBox.setMaxWidth(500);
-        signupBox.setStyle("-fx-background-color: rgba(10, 10, 30, 0.8); -fx-background-radius: 15;");
-        Image backgroundImage = new Image("file:src/assets/images/space-bg.jpg"); // mets le bon chemin ici
-        BackgroundImage bg = new BackgroundImage(
-                backgroundImage,
-                BackgroundRepeat.NO_REPEAT,
-                BackgroundRepeat.NO_REPEAT,
-                BackgroundPosition.CENTER,
-                new BackgroundSize(100, 100, true, true, true, false)
-        );
+        signupBox.setStyle("-fx-background-color: rgba(10, 10, 30, 0.7); -fx-background-radius: 15;");
+
+        StackPane root = new StackPane();
+        ImageView background = loadBackgroundImage("/img.jpg");
+        setupBackgroundImage(background);
+        animateBackground(background);
+        root.getChildren().add(background);
+
+        Rectangle overlay = new Rectangle(WINDOW_WIDTH, WINDOW_HEIGHT);
+        overlay.setFill(new LinearGradient(0, 0, 0, 1, true, CycleMethod.NO_CYCLE,
+                new Stop(0, Color.TRANSPARENT),
+                new Stop(0.3, Color.rgb(0, 0, 0, 0.5)),
+                new Stop(1, Color.rgb(0, 0, 0, 0.7))
+        ));
+        root.getChildren().add(overlay);
+
         Label title = new Label("SIGN UP");
-        title.setFont(Font.font("Arial", FontWeight.BOLD, 32));
-        title.setTextFill(Color.web(COLOR_ACCENT));
+        title.setFont(Font.font("Agency FB", FontWeight.EXTRA_BOLD, 46));
+        title.setTextFill(Color.WHITE);
+
+        DropShadow glow = new DropShadow(15, Color.web(COLOR_ACCENT));
+        glow.setSpread(0.3);
+        Bloom bloom = new Bloom(0.3);
+        title.setEffect(new Blend(BlendMode.SCREEN, bloom, glow));
+        animateTextGlow(title, glow);
 
         TextField usernameField = createStylizedTextField("Enter your Username");
         PasswordField passwordField = createStylizedPasswordField("Enter your Password");
         PasswordField passwordField1 = createStylizedPasswordField("Confirm your Password");
 
-        Button signupBtn = createActionButton("Sign Up", COLOR_ACCENT);
+        Button signupBtn = createActionButton("SIGN UP", COLOR_ACCENT);
         signupBtn.setPrefWidth(200);
-        signupBtn.setOnAction(e -> {
-            playButtonPressAnimation(signupBtn);
-            transitionToScene(() -> {
-                setupMainMenu();
-                showNotification("Inscription réussie !");
-            });
-        });
 
         Button backBtn = createActionButton("Return", "gray");
         backBtn.setPrefWidth(200);
+
         backBtn.setOnAction(e -> {
             playButtonPressAnimation(backBtn);
-            transitionToScene(this::setupMainMenu);
+            transitionToScene(() -> setupMainMenu());
         });
 
         signupBox.getChildren().addAll(title, usernameField, passwordField, passwordField1, signupBtn, backBtn);
 
         signupBox.setOpacity(0);
         signupBox.setTranslateY(20);
-
-        StackPane root = createAnimatedBackground();
         root.getChildren().add(signupBox);
 
         Scene signupScene = new Scene(root, WINDOW_WIDTH, WINDOW_HEIGHT);
         primaryStage.setScene(signupScene);
 
-        FadeTransition fade = new FadeTransition(Duration.seconds(0.8), signupBox);
+        animateFormEntrance(signupBox);
+    }
+
+    private ImageView loadBackgroundImage(String... paths) {
+        try {
+            for (String path : paths) {
+                InputStream is = getClass().getResourceAsStream(path);
+                if (is != null) {
+                    Image image = new Image(is);
+                    return new ImageView(image);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Erreur de chargement de l'image de fond: " + e.getMessage());
+        }
+        return createDefaultBackground();
+    }
+
+    private void animateFormEntrance(VBox form) {
+        FadeTransition fade = new FadeTransition(Duration.seconds(0.8), form);
         fade.setToValue(1);
 
-        TranslateTransition slide = new TranslateTransition(Duration.seconds(0.6), signupBox);
+        TranslateTransition slide = new TranslateTransition(Duration.seconds(0.6), form);
         slide.setToY(0);
 
-        new ParallelTransition(fade, slide).play();
+        ParallelTransition parallel = new ParallelTransition(fade, slide);
+        parallel.play();
     }
 
     private TextField createStylizedTextField(String promptText) {
