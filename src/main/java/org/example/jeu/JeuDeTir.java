@@ -63,7 +63,7 @@ public class JeuDeTir extends Application {
 
     private ImageView loadBackgroundImage() {
         try {
-            String[] paths = {"/background.jpg", "/background.png", "/img.jpg", "/img.png", "/image.jpg", "/image.png"};
+            String[] paths = {"/img.jpg"};
             for (String path : paths) {
                 InputStream is = getClass().getResourceAsStream(path);
                 if (is != null) {
@@ -114,7 +114,8 @@ public class JeuDeTir extends Application {
         rect.setFill(new RadialGradient(0, 0, 0.5, 0.5, 0.8, true, CycleMethod.NO_CYCLE,
                 new Stop(0, Color.web("#1a2a6c")),
                 new Stop(0.5, Color.web("#b21f1f")),
-                new Stop(1, Color.web("#fdbb2d"))));
+                new Stop(1, Color.web("#fdbb2d")))
+        );
         return new ImageView(rect.snapshot(null, null));
     }
 
@@ -198,18 +199,13 @@ public class JeuDeTir extends Application {
         );
         colorTimeline.setCycleCount(Animation.INDEFINITE);
 
-        RotateTransition rotateTransition = new RotateTransition(Duration.seconds(6), label);
-        rotateTransition.setByAngle(2);
-        rotateTransition.setCycleCount(Animation.INDEFINITE);
-        rotateTransition.setAutoReverse(true);
-
-        new ParallelTransition(glowTimeline, colorTimeline, rotateTransition).play();
+        new ParallelTransition(glowTimeline, colorTimeline).play();
     }
 
     private Label createSubtitleLabel() {
         Label label = new Label("Only the Fastest Survive the Sky");
-        label.setFont(Font.font("Bank Gothic", FontWeight.SEMI_BOLD, 26));
-        label.setTextFill(Color.web("#CCCCCC"));
+        label.setFont(Font.font("Bank Gothic", FontWeight.SEMI_BOLD, 35));
+        label.setTextFill(Color.web("white", 1.0));
 
         FadeTransition fade = new FadeTransition(Duration.seconds(3), label);
         fade.setFromValue(0.7);
@@ -217,7 +213,7 @@ public class JeuDeTir extends Application {
         fade.setCycleCount(Animation.INDEFINITE);
         fade.setAutoReverse(true);
 
-        ScaleTransition scale = new ScaleTransition(Duration.seconds(4), label);
+        ScaleTransition scale = new ScaleTransition(Duration.seconds(2), label);
         scale.setFromX(0.98);
         scale.setFromY(0.98);
         scale.setToX(1.02);
@@ -234,10 +230,10 @@ public class JeuDeTir extends Application {
         buttonBox.setAlignment(Pos.CENTER);
         buttonBox.setFillWidth(true);
 
-        Button startBtn = createActionButton("GUEST", COLOR_PRIMARY);
+        Button startBtn = createActionButton("START AS A GUEST", COLOR_PRIMARY);
         Button signUpBtn = createActionButton("SIGN UP", COLOR_ACCENT);
         Button signInBtn = createActionButton("SIGN IN", COLOR_SECONDARY);
-        Button quitBtn = createActionButton("QUITTER", COLOR_DANGER);
+        Button quitBtn = createActionButton("EXIT", COLOR_DANGER);
 
         startBtn.setPrefSize(300, 60);
         signUpBtn.setPrefSize(300, 60);
@@ -256,7 +252,7 @@ public class JeuDeTir extends Application {
 
         signUpBtn.setOnAction(e -> {
             playButtonPressAnimation(signUpBtn);
-            transitionToScene(() -> ShowSignUpScene());
+            transitionToScene(() -> showSignUpScene());
         });
 
         signInBtn.setOnAction(e -> {
@@ -429,21 +425,19 @@ public class JeuDeTir extends Application {
         ).play();
     }
 
-    public void showSignInScene() {
+    private void showSignInScene() {
         VBox loginBox = new VBox(20);
         loginBox.setAlignment(Pos.CENTER);
         loginBox.setPadding(new Insets(40));
         loginBox.setMaxWidth(500);
         loginBox.setStyle("-fx-background-color: rgba(10, 10, 30, 0.7); -fx-background-radius: 15;");
 
-        // Création du fond spécifique pour Sign In
         StackPane root = new StackPane();
         ImageView background = loadBackgroundImage("/img.jpg");
         setupBackgroundImage(background);
         animateBackground(background);
         root.getChildren().add(background);
 
-        // Overlay semi-transparent
         Rectangle overlay = new Rectangle(WINDOW_WIDTH, WINDOW_HEIGHT);
         overlay.setFill(new LinearGradient(0, 0, 0, 1, true, CycleMethod.NO_CYCLE,
                 new Stop(0, Color.TRANSPARENT),
@@ -452,20 +446,25 @@ public class JeuDeTir extends Application {
         ));
         root.getChildren().add(overlay);
 
-        Label title = new Label("Connexion");
-        title.setFont(Font.font("Arial", FontWeight.BOLD, 32));
-        title.setTextFill(Color.web(COLOR_PRIMARY));
+        Label title = new Label("SIGN IN");
+        title.setFont(Font.font("Agency FB", FontWeight.EXTRA_BOLD, 46));
+        title.setTextFill(Color.WHITE);
 
-        TextField usernameField = createStylizedTextField("Nom d'utilisateur");
-        PasswordField passwordField = createStylizedPasswordField("Mot de passe");
+        DropShadow glow = new DropShadow(15, Color.web(COLOR_PRIMARY));
+        glow.setSpread(0.3);
+        Bloom bloom = new Bloom(0.3);
+        title.setEffect(new Blend(BlendMode.SCREEN, bloom, glow));
+        animateTextGlow(title, glow);
 
-        Button loginBtn = createActionButton("Se connecter", COLOR_PRIMARY);
+        TextField usernameField = createStylizedTextField("Username");
+        PasswordField passwordField = createStylizedPasswordField("Password");
+
+        Button loginBtn = createActionButton("SIGN IN", COLOR_PRIMARY);
         loginBtn.setPrefWidth(200);
 
-        Button backBtn = createActionButton("Retour", "gray");
+        Button backBtn = createActionButton("Return", "gray");
         backBtn.setPrefWidth(200);
 
-        // CORRECTION: Ajout de l'action pour le bouton Retour
         backBtn.setOnAction(e -> {
             playButtonPressAnimation(backBtn);
             transitionToScene(() -> setupMainMenu());
@@ -473,7 +472,6 @@ public class JeuDeTir extends Application {
 
         loginBox.getChildren().addAll(title, usernameField, passwordField, loginBtn, backBtn);
 
-        // Animation d'entrée
         loginBox.setOpacity(0);
         loginBox.setTranslateY(20);
         root.getChildren().add(loginBox);
@@ -484,21 +482,19 @@ public class JeuDeTir extends Application {
         animateFormEntrance(loginBox);
     }
 
-    public void ShowSignUpScene() {
+    private void showSignUpScene() {
         VBox signupBox = new VBox(20);
         signupBox.setAlignment(Pos.CENTER);
         signupBox.setPadding(new Insets(40));
         signupBox.setMaxWidth(500);
         signupBox.setStyle("-fx-background-color: rgba(10, 10, 30, 0.7); -fx-background-radius: 15;");
 
-        // Création du fond spécifique pour Sign Up
         StackPane root = new StackPane();
         ImageView background = loadBackgroundImage("/img.jpg");
         setupBackgroundImage(background);
         animateBackground(background);
         root.getChildren().add(background);
 
-        // Overlay semi-transparent
         Rectangle overlay = new Rectangle(WINDOW_WIDTH, WINDOW_HEIGHT);
         overlay.setFill(new LinearGradient(0, 0, 0, 1, true, CycleMethod.NO_CYCLE,
                 new Stop(0, Color.TRANSPARENT),
@@ -508,20 +504,25 @@ public class JeuDeTir extends Application {
         root.getChildren().add(overlay);
 
         Label title = new Label("SIGN UP");
-        title.setFont(Font.font("Arial", FontWeight.BOLD, 32));
-        title.setTextFill(Color.web(COLOR_ACCENT));
+        title.setFont(Font.font("Agency FB", FontWeight.EXTRA_BOLD, 46));
+        title.setTextFill(Color.WHITE);
+
+        DropShadow glow = new DropShadow(15, Color.web(COLOR_ACCENT));
+        glow.setSpread(0.3);
+        Bloom bloom = new Bloom(0.3);
+        title.setEffect(new Blend(BlendMode.SCREEN, bloom, glow));
+        animateTextGlow(title, glow);
 
         TextField usernameField = createStylizedTextField("Enter your Username");
         PasswordField passwordField = createStylizedPasswordField("Enter your Password");
         PasswordField passwordField1 = createStylizedPasswordField("Confirm your Password");
 
-        Button signupBtn = createActionButton("Sign Up", COLOR_ACCENT);
+        Button signupBtn = createActionButton("SIGN UP", COLOR_ACCENT);
         signupBtn.setPrefWidth(200);
 
         Button backBtn = createActionButton("Return", "gray");
         backBtn.setPrefWidth(200);
 
-        // CORRECTION: Ajout de l'action pour le bouton Return
         backBtn.setOnAction(e -> {
             playButtonPressAnimation(backBtn);
             transitionToScene(() -> setupMainMenu());
@@ -529,7 +530,6 @@ public class JeuDeTir extends Application {
 
         signupBox.getChildren().addAll(title, usernameField, passwordField, passwordField1, signupBtn, backBtn);
 
-        // Animation d'entrée
         signupBox.setOpacity(0);
         signupBox.setTranslateY(20);
         root.getChildren().add(signupBox);
@@ -540,7 +540,6 @@ public class JeuDeTir extends Application {
         animateFormEntrance(signupBox);
     }
 
-    // Nouvelle méthode pour charger des images de fond spécifiques
     private ImageView loadBackgroundImage(String... paths) {
         try {
             for (String path : paths) {
@@ -556,7 +555,6 @@ public class JeuDeTir extends Application {
         return createDefaultBackground();
     }
 
-    // Méthode pour animer l'entrée du formulaire
     private void animateFormEntrance(VBox form) {
         FadeTransition fade = new FadeTransition(Duration.seconds(0.8), form);
         fade.setToValue(1);
