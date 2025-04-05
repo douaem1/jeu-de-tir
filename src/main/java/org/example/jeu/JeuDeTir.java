@@ -1,3 +1,4 @@
+
 package org.example.jeu;
 
 import javafx.application.Application;
@@ -15,6 +16,8 @@ import javafx.stage.Stage;
 import javafx.animation.*;
 import javafx.util.Duration;
 import java.io.InputStream;
+import javafx.scene.input.KeyCode;
+import javafx.scene.Node;
 
 public class JeuDeTir extends Application {
     private Stage primaryStage;
@@ -25,6 +28,8 @@ public class JeuDeTir extends Application {
     private static final String COLOR_SECONDARY = "#F18F01";
     private static final String COLOR_ACCENT = "#A23B72";
     private static final String COLOR_DANGER = "#C73E1D";
+    private int score = 0;
+    private int lives = 3;
 
     @Override
     public void start(Stage primaryStage) {
@@ -247,7 +252,7 @@ public class JeuDeTir extends Application {
 
         startBtn.setOnAction(e -> {
             playButtonPressAnimation(startBtn);
-            showNotification("Initialisation du système...");
+            transitionToScene(() -> startGame());
         });
 
         signUpBtn.setOnAction(e -> {
@@ -626,6 +631,238 @@ public class JeuDeTir extends Application {
 
         background.getChildren().add(particleLayer);
         return background;
+    }
+    private void startGame() {
+        Pane gamePane = new Pane();
+        gamePane.setPrefSize(WINDOW_WIDTH, WINDOW_HEIGHT);
+
+        ImageView gameBackground = loadBackgroundImage("/img.jpg");
+        setupBackgroundImage(gameBackground);
+        animateBackground(gameBackground);
+
+        Rectangle overlay = new Rectangle(WINDOW_WIDTH, WINDOW_HEIGHT);
+        overlay.setFill(new LinearGradient(0, 0, 0, 1, true, CycleMethod.NO_CYCLE,
+                new Stop(0, Color.TRANSPARENT),
+                new Stop(1, Color.rgb(0, 0, 0, 0.3))
+        ));
+
+        gamePane.getChildren().addAll(gameBackground, overlay);
+
+        ImageView player = createPlayerAirplane();
+        gamePane.getChildren().add(player);
+
+        HUD hud = new HUD();
+        gamePane.getChildren().add(hud);
+        StackPane.setAlignment(hud, Pos.TOP_LEFT);
+
+        setupPlayerMovement(gamePane, player);
+        setupShootingMechanics(gamePane, player, hud);
+        setupEnemySpawning(gamePane, hud);
+
+        Scene gameScene = new Scene(gamePane, WINDOW_WIDTH, WINDOW_HEIGHT);
+        gameScene.setOnMouseClicked(event -> gamePane.requestFocus());
+        primaryStage.setScene(gameScene);
+        gamePane.requestFocus();
+    }
+
+    private ImageView createPlayerAirplane() {
+        try {
+            InputStream is = getClass().getResourceAsStream("/airplane.png");
+            Image image = new Image(is);
+            ImageView airplane = new ImageView(image);
+            airplane.setFitWidth(80);
+            airplane.setFitHeight(60);
+            airplane.setPreserveRatio(true);
+            airplane.setX(WINDOW_WIDTH / 2 - 40);
+            airplane.setY(WINDOW_HEIGHT - 100);
+            return airplane;
+        } catch (Exception e) {
+            Polygon airplane = new Polygon(0.0, 20.0, 15.0, 0.0, 30.0, 20.0, 25.0, 20.0, 25.0, 40.0, 5.0, 40.0, 5.0, 20.0);
+            airplane.setFill(Color.BLUE);
+            airplane.setStroke(Color.WHITE);
+            airplane.setLayoutX(WINDOW_WIDTH / 2 - 15);
+            airplane.setLayoutY(WINDOW_HEIGHT - 100);
+            return new ImageView(airplane.snapshot(null, null));
+        }
+    }
+
+    private void setupPlayerMovement(Pane gamePane, ImageView player) {
+        gamePane.setOnKeyPressed(e -> {
+            double speed = 8;
+            switch (e.getCode()) {
+                case LEFT: if (player.getX() > 0) player.setX(player.getX() - speed); break;
+                case RIGHT: if (player.getX() < WINDOW_WIDTH - player.getFitWidth()) player.setX(player.getX() + speed); break;
+                case UP: if (player.getY() > WINDOW_HEIGHT / 2) player.setY(player.getY() - speed); break;
+                case DOWN: if (player.getY() < WINDOW_HEIGHT - player.getFitHeight()) player.setY(player.getY() + speed); break;
+            }
+        });
+    }
+
+    private void setupShootingMechanics(Pane gamePane, ImageView player, HUD hud) {
+        gamePane.setOnKeyPressed(e -> {
+            if (e.getCode() == KeyCode.SPACE) {
+                Rectangle bullet = new Rectangle(4, 15, Color.YELLOW);
+                bullet.setX(player.getX() + player.getFitWidth() / 2 - 2);
+                bullet.setY(player.getY());
+                gamePane.getChildren().add(bullet);
+
+                Timeline bulletMovement = new Timeline(
+                        new KeyFrame(Duration.millis(16), event -> {
+                            bullet.setY(bullet.getY() - 10);
+                            checkCollisions(gamePane, bullet, hud);
+                            if (bullet.getY() < 0) {
+                                gamePane.getChildren().remove(bullet);
+                                ((Timeline)event.getSource()).stop();
+                            }
+                        })
+                );
+                bulletMovement.setCycleCount(Animation.INDEFINITE);
+                bulletMovement.play();
+            }
+        });
+    }
+
+    private void setupEnemySpawning(Pane gamePane, HUD hud) {
+        Timeline enemySpawner = new Timeline(
+                new KeyFrame(Duration.seconds(2), event -> {
+                    ImageView enemy = createEnemyAirplane();
+                    gamePane.getChildren().add(enemy);
+
+                    Timeline enemyMovement = new Timeline(
+                            new KeyFrame(Duration.millis(16), e -> {
+                                enemy.setY(enemy.getY() + 3);
+                                checkPlayerCollision(gamePane, enemy, hud);
+                                if (enemy.getY() > WINDOW_HEIGHT) {
+                                    gamePane.getChildren().remove(enemy);
+                                    ((Timeline)e.getSource()).stop();
+                                }
+                            })
+                    );
+                    enemyMovement.setCycleCount(Animation.INDEFINITE);
+                    enemyMovement.play();
+                })
+        );
+        enemySpawner.setCycleCount(Animation.INDEFINITE);
+        enemySpawner.play();
+    }
+
+    private ImageView createEnemyAirplane() {
+        try {
+            InputStream is = getClass().getResourceAsStream("/enemy_airplane.png");
+            Image image = new Image(is);
+            ImageView enemy = new ImageView(image);
+            enemy.setFitWidth(60);
+            enemy.setFitHeight(45);
+            enemy.setPreserveRatio(true);
+            enemy.setX(Math.random() * (WINDOW_WIDTH - 60));
+            enemy.setY(-60);
+            return enemy;
+        } catch (Exception e) {
+            Polygon enemy = new Polygon(0.0, 0.0, 15.0, 20.0, 30.0, 0.0, 25.0, 0.0, 25.0, -20.0, 5.0, -20.0, 5.0, 0.0);
+            enemy.setFill(Color.RED);
+            enemy.setStroke(Color.WHITE);
+            enemy.setLayoutX(Math.random() * (WINDOW_WIDTH - 30));
+            enemy.setLayoutY(-30);
+            return new ImageView(enemy.snapshot(null, null));
+        }
+    }
+
+    private void checkCollisions(Pane gamePane, Rectangle bullet, HUD hud) {
+        for (Node node : gamePane.getChildren()) {
+            if (node instanceof ImageView && node != gamePane.getChildren().get(0)) {
+                ImageView enemy = (ImageView) node;
+                if (bullet.getBoundsInParent().intersects(enemy.getBoundsInParent())) {
+                    gamePane.getChildren().removeAll(bullet, enemy);
+                    score += 10;
+                    ((Label)hud.getChildren().get(0)).setText("Score: " + score);
+                    createExplosion(gamePane, enemy.getX(), enemy.getY());
+                    return;
+                }
+            }
+        }
+    }
+
+    private void checkPlayerCollision(Pane gamePane, ImageView enemy, HUD hud) {
+        ImageView player = (ImageView) gamePane.getChildren().get(2); // Index du joueur
+        if (enemy.getBoundsInParent().intersects(player.getBoundsInParent())) {
+            gamePane.getChildren().remove(enemy);
+            lives--;
+            ((Label)hud.getChildren().get(1)).setText("Lives: " + lives);
+            createExplosion(gamePane, player.getX(), player.getY());
+            if (lives <= 0) gameOver(gamePane);
+        }
+    }
+
+    private void createExplosion(Pane gamePane, double x, double y) {
+        Circle explosion = new Circle(0, Color.ORANGE);
+        explosion.setCenterX(x + 30);
+        explosion.setCenterY(y + 30);
+        explosion.setEffect(new Glow(0.8));
+        gamePane.getChildren().add(explosion);
+
+        Timeline explosionAnim = new Timeline(
+                new KeyFrame(Duration.ZERO, new KeyValue(explosion.radiusProperty(), 0)),
+                new KeyFrame(Duration.millis(200), new KeyValue(explosion.radiusProperty(), 30)),
+                new KeyFrame(Duration.millis(400), new KeyValue(explosion.radiusProperty(), 50)),
+                new KeyFrame(Duration.millis(600), new KeyValue(explosion.opacityProperty(), 0))
+        );
+        explosionAnim.setOnFinished(e -> gamePane.getChildren().remove(explosion));
+        explosionAnim.play();
+    }
+
+    private void gameOver(Pane gamePane) {
+        VBox gameOverBox = new VBox(20);
+        gameOverBox.setAlignment(Pos.CENTER);
+        gameOverBox.setStyle("-fx-background-color: rgba(0,0,0,0.8); -fx-background-radius: 15;");
+        gameOverBox.setPadding(new Insets(40));
+
+        Label title = new Label("GAME OVER");
+        title.setFont(Font.font("Agency FB", FontWeight.EXTRA_BOLD, 56));
+        title.setTextFill(Color.WHITE);
+
+        Label scoreLabel = new Label("Final Score: " + score);
+        scoreLabel.setFont(Font.font("Arial", FontWeight.BOLD, 24));
+        scoreLabel.setTextFill(Color.WHITE);
+
+        Button restartBtn = createActionButton("PLAY AGAIN", COLOR_PRIMARY);
+        Button menuBtn = createActionButton("MAIN MENU", COLOR_SECONDARY);
+
+        restartBtn.setOnAction(e -> {
+            score = 0;
+            lives = 3;
+            transitionToScene(() -> startGame());
+        });
+
+        menuBtn.setOnAction(e -> {
+            score = 0;
+            lives = 3;
+            transitionToScene(() -> setupMainMenu());
+        });
+
+        gameOverBox.getChildren().addAll(title, scoreLabel, restartBtn, menuBtn);
+        gameOverBox.setOpacity(0);
+        gamePane.getChildren().add(gameOverBox);
+
+        FadeTransition fadeIn = new FadeTransition(Duration.seconds(0.8), gameOverBox);
+        fadeIn.setToValue(1);
+        fadeIn.play();
+    }
+    class HUD extends HBox {
+        public HUD() {
+            setStyle("-fx-background-color: rgba(0,0,0,0.5);");
+            setPadding(new Insets(10));
+            setSpacing(20);
+
+            Label scoreLabel = new Label("Score: 0");
+            scoreLabel.setTextFill(Color.WHITE);
+            scoreLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
+
+            Label livesLabel = new Label("Lives: 3");
+            livesLabel.setTextFill(Color.WHITE);
+            livesLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
+
+            getChildren().addAll(scoreLabel, livesLabel);
+        }
     }
 
     public static void main(String[] args) {
