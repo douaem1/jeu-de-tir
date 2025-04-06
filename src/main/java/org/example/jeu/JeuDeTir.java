@@ -636,7 +636,7 @@ public class JeuDeTir extends Application {
         Pane gamePane = new Pane();
         gamePane.setPrefSize(WINDOW_WIDTH, WINDOW_HEIGHT);
 
-        ImageView gameBackground = loadBackgroundImage("/img.jpg");
+        ImageView gameBackground = loadBackgroundImage("/backround.jpg");
         setupBackgroundImage(gameBackground);
         animateBackground(gameBackground);
 
@@ -670,7 +670,7 @@ public class JeuDeTir extends Application {
             InputStream is = getClass().getResourceAsStream("/airplane.png");
             Image image = new Image(is);
             ImageView airplane = new ImageView(image);
-            airplane.setFitWidth(80);
+            airplane.setFitWidth(200);
             airplane.setFitHeight(60);
             airplane.setPreserveRatio(true);
             airplane.setX(WINDOW_WIDTH / 2 - 40);
@@ -751,7 +751,7 @@ public class JeuDeTir extends Application {
             InputStream is = getClass().getResourceAsStream("/enemy_airplane.png");
             Image image = new Image(is);
             ImageView enemy = new ImageView(image);
-            enemy.setFitWidth(60);
+            enemy.setFitWidth(200);
             enemy.setFitHeight(45);
             enemy.setPreserveRatio(true);
             enemy.setX(Math.random() * (WINDOW_WIDTH - 60));
