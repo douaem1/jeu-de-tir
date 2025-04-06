@@ -1,10 +1,9 @@
-
 package org.example.jeu;
 
+import javafx.animation.*;
 import javafx.application.Application;
-import javafx.geometry.Insets;
-import javafx.geometry.Pos;
-import javafx.scene.Scene;
+import javafx.geometry.*;
+import javafx.scene.*;
 import javafx.scene.control.*;
 import javafx.scene.effect.*;
 import javafx.scene.image.*;
@@ -13,76 +12,120 @@ import javafx.scene.paint.*;
 import javafx.scene.shape.*;
 import javafx.scene.text.*;
 import javafx.stage.Stage;
-import javafx.animation.*;
 import javafx.util.Duration;
 import java.io.InputStream;
 import javafx.scene.input.KeyCode;
 import javafx.scene.Node;
+import java.util.*;
 
 public class JeuDeTir extends Application {
     private Stage primaryStage;
     private static final int WINDOW_WIDTH = 1200;
     private static final int WINDOW_HEIGHT = 800;
 
-    private static final String COLOR_PRIMARY = "#2E86AB";
-    private static final String COLOR_SECONDARY = "#F18F01";
-    private static final String COLOR_ACCENT = "#A23B72";
-    private static final String COLOR_DANGER = "#C73E1D";
+    // Constantes améliorées
+    private static final String[] BACKGROUND_PATHS = {"/img.jpg", "/background.jpg", "/backround.jpg"};
+    private static final String[] FONT_FAMILIES = {"Agency FB", "Arial", "Bank Gothic"};
+    private ImageView player;
+    private List<ImageView> enemies = new ArrayList<>();
+    private Pane gamePane;
+    private static final String GAME_BACKGROUND_PATH = "/background.jpg";
+    // Couleurs avec palette étendue
+    private static final Map<String, Color> COLORS = Map.of(
+            "PRIMARY", Color.web("#2E86AB"),
+            "SECONDARY", Color.web("#F18F01"),
+            "ACCENT", Color.web("#A23B72"),
+            "DANGER", Color.web("#C73E1D"),
+            "LIGHT", Color.web("#F5F5F5"),
+            "DARK", Color.web("#121212")
+    );
+
     private int score = 0;
     private int lives = 3;
+    private boolean gameRunning = true;
+    private List<Animation> activeAnimations = new ArrayList<>();
 
     @Override
     public void start(Stage primaryStage) {
         this.primaryStage = primaryStage;
-        primaryStage.setTitle("Jet Fighters - Édition Premium");
+        primaryStage.setTitle("Jet Fighters Premium Deluxe");
         setupMainMenu();
+        player = null;
+        enemies.clear();
+        gamePane = null;
+
+        // Configuration supplémentaire de la fenêtre
+        primaryStage.setMinWidth(1000);
+        primaryStage.setMinHeight(700);
+        primaryStage.setOnCloseRequest(e -> {
+            stopAllAnimations();
+            primaryStage.close();
+        });
+    }
+
+    private void stopAllAnimations() {
+        activeAnimations.forEach(Animation::stop);
     }
 
     private void setupMainMenu() {
         StackPane root = new StackPane();
-        ImageView background = loadBackgroundImage();
-        root.getChildren().add(background);
 
+        // Chargement optimisé du fond
+        ImageView background = loadBestBackground();
+        root.getChildren().add(background);
         animateBackground(background);
 
-        Rectangle overlay = new Rectangle(WINDOW_WIDTH, WINDOW_HEIGHT);
-        overlay.setFill(new LinearGradient(0, 0, 0, 1, true, CycleMethod.NO_CYCLE,
-                new Stop(0, Color.TRANSPARENT),
-                new Stop(0.3, Color.rgb(0, 0, 0, 0.4)),
-                new Stop(1, Color.rgb(0, 0, 0, 0.7))
-        ));
+        // Overlay avec effet de dégradé amélioré
+        Rectangle overlay = createOverlay();
         root.getChildren().add(overlay);
 
-        Pane particleLayer = createParticleEffect();
-        root.getChildren().add(particleLayer);
+        // Particules optimisées
+        root.getChildren().add(createParticleEffect());
 
+        // Contenu principal
         VBox mainContainer = createMainContainer();
         root.getChildren().add(mainContainer);
 
         Scene scene = new Scene(root, WINDOW_WIDTH, WINDOW_HEIGHT);
         primaryStage.setScene(scene);
-        primaryStage.setMinWidth(1000);
-        primaryStage.setMinHeight(700);
         primaryStage.show();
     }
 
-    private ImageView loadBackgroundImage() {
-        try {
-            String[] paths = {"/img.jpg"};
-            for (String path : paths) {
-                InputStream is = getClass().getResourceAsStream(path);
+    private ImageView loadBestBackground() {
+        for (String path : BACKGROUND_PATHS) {
+            try (InputStream is = getClass().getResourceAsStream(path)) {
                 if (is != null) {
                     Image image = new Image(is);
                     ImageView view = new ImageView(image);
                     setupBackgroundImage(view);
                     return view;
                 }
+            } catch (Exception e) {
+                System.err.println("Erreur de chargement de l'image: " + path);
             }
-            throw new RuntimeException("Aucune image de fond trouvée");
-        } catch (Exception e) {
-            System.err.println("Erreur: " + e.getMessage());
-            return createDefaultBackground();
         }
+        return createDefaultBackground();
+    }
+
+    private Rectangle createOverlay() {
+        Rectangle overlay = new Rectangle(WINDOW_WIDTH, WINDOW_HEIGHT);
+        overlay.setFill(new LinearGradient(
+                0, 0, 0, 1, true, CycleMethod.NO_CYCLE,
+                new Stop(0, Color.TRANSPARENT),
+                new Stop(0.3, Color.rgb(0, 0, 0, 0.5)),
+                new Stop(1, Color.rgb(0, 0, 0, 0.8))
+        ));
+        return overlay;
+    }
+
+    private ImageView createDefaultBackground() {
+        Rectangle rect = new Rectangle(WINDOW_WIDTH, WINDOW_HEIGHT);
+        rect.setFill(new RadialGradient(0, 0, 0.5, 0.5, 0.8, true, CycleMethod.NO_CYCLE,
+                new Stop(0, Color.web("#1a2a6c")),
+                new Stop(0.5, Color.web("#b21f1f")),
+                new Stop(1, Color.web("#fdbb2d")))
+        );
+        return new ImageView(rect.snapshot(null, null));
     }
 
     private void setupBackgroundImage(ImageView imageView) {
@@ -112,16 +155,7 @@ public class JeuDeTir extends Application {
 
         ParallelTransition parallelTransition = new ParallelTransition(zoom, pan);
         parallelTransition.play();
-    }
-
-    private ImageView createDefaultBackground() {
-        Rectangle rect = new Rectangle(WINDOW_WIDTH, WINDOW_HEIGHT);
-        rect.setFill(new RadialGradient(0, 0, 0.5, 0.5, 0.8, true, CycleMethod.NO_CYCLE,
-                new Stop(0, Color.web("#1a2a6c")),
-                new Stop(0.5, Color.web("#b21f1f")),
-                new Stop(1, Color.web("#fdbb2d")))
-        );
-        return new ImageView(rect.snapshot(null, null));
+        activeAnimations.add(parallelTransition);
     }
 
     private Pane createParticleEffect() {
@@ -148,6 +182,7 @@ public class JeuDeTir extends Application {
             timeline.setCycleCount(Animation.INDEFINITE);
             timeline.setAutoReverse(true);
             timeline.play();
+            activeAnimations.add(timeline);
         }
 
         return particlePane;
@@ -171,10 +206,10 @@ public class JeuDeTir extends Application {
 
     private Label createTitleLabel() {
         Label label = new Label("JET FIGHTERS");
-        label.setFont(Font.font("Agency FB", FontWeight.EXTRA_BOLD, 74));
-        label.setTextFill(Color.WHITE);
+        label.setFont(Font.font(FONT_FAMILIES[0], FontWeight.EXTRA_BOLD, 74));
+        label.setTextFill(COLORS.get("LIGHT"));
 
-        DropShadow glow = new DropShadow(15, Color.web(COLOR_PRIMARY));
+        DropShadow glow = new DropShadow(15, COLORS.get("PRIMARY"));
         glow.setSpread(0.3);
         Bloom bloom = new Bloom(0.3);
 
@@ -194,23 +229,25 @@ public class JeuDeTir extends Application {
 
         Timeline colorTimeline = new Timeline(
                 new KeyFrame(Duration.ZERO,
-                        new KeyValue(glow.colorProperty(), Color.web(COLOR_PRIMARY))),
+                        new KeyValue(glow.colorProperty(), COLORS.get("PRIMARY"))),
                 new KeyFrame(Duration.seconds(3),
-                        new KeyValue(glow.colorProperty(), Color.web(COLOR_SECONDARY))),
+                        new KeyValue(glow.colorProperty(), COLORS.get("SECONDARY"))),
                 new KeyFrame(Duration.seconds(6),
-                        new KeyValue(glow.colorProperty(), Color.web(COLOR_ACCENT))),
+                        new KeyValue(glow.colorProperty(), COLORS.get("ACCENT"))),
                 new KeyFrame(Duration.seconds(9),
-                        new KeyValue(glow.colorProperty(), Color.web(COLOR_PRIMARY)))
+                        new KeyValue(glow.colorProperty(), COLORS.get("PRIMARY")))
         );
         colorTimeline.setCycleCount(Animation.INDEFINITE);
 
-        new ParallelTransition(glowTimeline, colorTimeline).play();
+        ParallelTransition parallel = new ParallelTransition(glowTimeline, colorTimeline);
+        parallel.play();
+        activeAnimations.add(parallel);
     }
 
     private Label createSubtitleLabel() {
         Label label = new Label("Only the Fastest Survive the Sky");
-        label.setFont(Font.font("Bank Gothic", FontWeight.SEMI_BOLD, 35));
-        label.setTextFill(Color.web("white", 1.0));
+        label.setFont(Font.font(FONT_FAMILIES[2], FontWeight.SEMI_BOLD, 35));
+        label.setTextFill(COLORS.get("LIGHT"));
 
         FadeTransition fade = new FadeTransition(Duration.seconds(3), label);
         fade.setFromValue(0.7);
@@ -226,7 +263,10 @@ public class JeuDeTir extends Application {
         scale.setCycleCount(Animation.INDEFINITE);
         scale.setAutoReverse(true);
 
-        new ParallelTransition(fade, scale).play();
+        ParallelTransition parallel = new ParallelTransition(fade, scale);
+        parallel.play();
+        activeAnimations.add(parallel);
+
         return label;
     }
 
@@ -235,10 +275,10 @@ public class JeuDeTir extends Application {
         buttonBox.setAlignment(Pos.CENTER);
         buttonBox.setFillWidth(true);
 
-        Button startBtn = createActionButton("START AS A GUEST", COLOR_PRIMARY);
-        Button signUpBtn = createActionButton("SIGN UP", COLOR_ACCENT);
-        Button signInBtn = createActionButton("SIGN IN", COLOR_SECONDARY);
-        Button quitBtn = createActionButton("EXIT", COLOR_DANGER);
+        Button startBtn = createActionButton("START AS A GUEST", "PRIMARY");
+        Button signUpBtn = createActionButton("SIGN UP", "ACCENT");
+        Button signInBtn = createActionButton("SIGN IN", "SECONDARY");
+        Button quitBtn = createActionButton("EXIT", "DANGER");
 
         startBtn.setPrefSize(300, 60);
         signUpBtn.setPrefSize(300, 60);
@@ -274,9 +314,12 @@ public class JeuDeTir extends Application {
         return buttonBox;
     }
 
-    private Button createActionButton(String text, String color) {
+    private Button createActionButton(String text, String colorKey) {
+        Color color = COLORS.get(colorKey);
+        String hexColor = toHex(color);
+
         Button btn = new Button(text);
-        btn.setStyle("-fx-background-color: " + color + "; " +
+        btn.setStyle("-fx-background-color: " + hexColor + "; " +
                 "-fx-text-fill: white; " +
                 "-fx-font-weight: bold; " +
                 "-fx-font-size: 18; " +
@@ -287,25 +330,27 @@ public class JeuDeTir extends Application {
         btn.setAlignment(Pos.CENTER);
 
         btn.setOnMouseEntered(e -> {
-            String lightenedColor = lightenColor(color, 0.1);
-            btn.setStyle(btn.getStyle().replace(color, lightenedColor) +
-                    "-fx-effect: dropshadow(gaussian, " + color + ", 15, 0.5, 0, 0);");
+            String lightenedColor = toHex(color.brighter());
+            btn.setStyle(btn.getStyle().replace(hexColor, lightenedColor) +
+                    "-fx-effect: dropshadow(gaussian, " + hexColor + ", 15, 0.5, 0, 0);");
 
             ScaleTransition pulse = new ScaleTransition(Duration.millis(300), btn);
             pulse.setToX(1.05);
             pulse.setToY(1.05);
             pulse.play();
+            activeAnimations.add(pulse);
         });
 
         btn.setOnMouseExited(e -> {
             btn.setStyle(btn.getStyle()
-                    .replace(lightenColor(color, 0.1), color)
+                    .replace(toHex(color.brighter()), hexColor)
                     .replace("-fx-effect:.*;", "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 5, 0, 0, 2);"));
 
             ScaleTransition resetScale = new ScaleTransition(Duration.millis(300), btn);
             resetScale.setToX(1.0);
             resetScale.setToY(1.0);
             resetScale.play();
+            activeAnimations.add(resetScale);
         });
 
         return btn;
@@ -322,6 +367,7 @@ public class JeuDeTir extends Application {
 
         SequentialTransition sequence = new SequentialTransition(scaleDown, scaleUp);
         sequence.play();
+        activeAnimations.add(sequence);
     }
 
     private void fadeOutAndClose() {
@@ -330,6 +376,7 @@ public class JeuDeTir extends Application {
         fade.setToValue(0.0);
         fade.setOnFinished(e -> primaryStage.close());
         fade.play();
+        activeAnimations.add(fade);
     }
 
     private void transitionToScene(Runnable sceneSetup) {
@@ -345,29 +392,18 @@ public class JeuDeTir extends Application {
         fadeIn.setToValue(1.0);
         fadeIn.setOnFinished(e -> {
             sceneSetup.run();
+            root.getChildren().remove(transitionRect);
         });
 
         fadeIn.play();
+        activeAnimations.add(fadeIn);
     }
 
-    private String darkenColor(String hexColor, double factor) {
-        Color color = Color.web(hexColor);
+    private String toHex(Color color) {
         return String.format("#%02x%02x%02x",
-                (int)(color.getRed() * 255 * (1 - factor)),
-                (int)(color.getGreen() * 255 * (1 - factor)),
-                (int)(color.getBlue() * 255 * (1 - factor)));
-    }
-
-    private String lightenColor(String hexColor, double factor) {
-        Color color = Color.web(hexColor);
-        return String.format("#%02x%02x%02x",
-                clamp((int)(color.getRed() * 255 * (1 + factor))),
-                clamp((int)(color.getGreen() * 255 * (1 + factor))),
-                clamp((int)(color.getBlue() * 255 * (1 + factor))));
-    }
-
-    private int clamp(int value) {
-        return Math.min(255, Math.max(0, value));
+                (int)(color.getRed() * 255),
+                (int)(color.getGreen() * 255),
+                (int)(color.getBlue() * 255));
     }
 
     private void animateMenuEntrance(VBox container) {
@@ -385,13 +421,17 @@ public class JeuDeTir extends Application {
         scale.setToX(1.0);
         scale.setToY(1.0);
 
-        new ParallelTransition(fade, slide, scale).play();
+        ParallelTransition parallel = new ParallelTransition(fade, slide, scale);
+        parallel.play();
+        activeAnimations.add(parallel);
     }
 
     private void showNotification(String message) {
         Label notification = new Label(message);
-        notification.setStyle("-fx-background-color: rgba(0,0,0,0.8); -fx-text-fill: white; -fx-padding: 12 25; -fx-background-radius: 20; -fx-font-size: 16;");
-        notification.setEffect(new DropShadow(10, Color.web(COLOR_PRIMARY)));
+        notification.setStyle("-fx-background-color: rgba(0,0,0,0.8); " +
+                "-fx-text-fill: white; -fx-padding: 12 25; " +
+                "-fx-background-radius: 20; -fx-font-size: 16;");
+        notification.setEffect(new DropShadow(10, COLORS.get("PRIMARY")));
 
         StackPane root = (StackPane) primaryStage.getScene().getRoot();
         root.getChildren().add(notification);
@@ -423,11 +463,13 @@ public class JeuDeTir extends Application {
         fadeOut.setToValue(0);
         fadeOut.setOnFinished(e -> root.getChildren().remove(notification));
 
-        new SequentialTransition(
+        SequentialTransition sequence = new SequentialTransition(
                 new ParallelTransition(fadeIn, scaleIn),
                 pulse,
                 fadeOut
-        ).play();
+        );
+        sequence.play();
+        activeAnimations.add(sequence);
     }
 
     private void showSignInScene() {
@@ -438,24 +480,19 @@ public class JeuDeTir extends Application {
         loginBox.setStyle("-fx-background-color: rgba(10, 10, 30, 0.7); -fx-background-radius: 15;");
 
         StackPane root = new StackPane();
-        ImageView background = loadBackgroundImage("/img.jpg");
+        ImageView background = loadBestBackground();
         setupBackgroundImage(background);
         animateBackground(background);
         root.getChildren().add(background);
 
-        Rectangle overlay = new Rectangle(WINDOW_WIDTH, WINDOW_HEIGHT);
-        overlay.setFill(new LinearGradient(0, 0, 0, 1, true, CycleMethod.NO_CYCLE,
-                new Stop(0, Color.TRANSPARENT),
-                new Stop(0.3, Color.rgb(0, 0, 0, 0.5)),
-                new Stop(1, Color.rgb(0, 0, 0, 0.7))
-        ));
+        Rectangle overlay = createOverlay();
         root.getChildren().add(overlay);
 
         Label title = new Label("SIGN IN");
-        title.setFont(Font.font("Agency FB", FontWeight.EXTRA_BOLD, 46));
-        title.setTextFill(Color.WHITE);
+        title.setFont(Font.font(FONT_FAMILIES[0], FontWeight.EXTRA_BOLD, 46));
+        title.setTextFill(COLORS.get("LIGHT"));
 
-        DropShadow glow = new DropShadow(15, Color.web(COLOR_PRIMARY));
+        DropShadow glow = new DropShadow(15, COLORS.get("PRIMARY"));
         glow.setSpread(0.3);
         Bloom bloom = new Bloom(0.3);
         title.setEffect(new Blend(BlendMode.SCREEN, bloom, glow));
@@ -464,10 +501,10 @@ public class JeuDeTir extends Application {
         TextField usernameField = createStylizedTextField("Username");
         PasswordField passwordField = createStylizedPasswordField("Password");
 
-        Button loginBtn = createActionButton("SIGN IN", COLOR_PRIMARY);
+        Button loginBtn = createActionButton("SIGN IN", "PRIMARY");
         loginBtn.setPrefWidth(200);
 
-        Button backBtn = createActionButton("Return", "gray");
+        Button backBtn = createActionButton("Return", "DARK");
         backBtn.setPrefWidth(200);
 
         backBtn.setOnAction(e -> {
@@ -495,24 +532,19 @@ public class JeuDeTir extends Application {
         signupBox.setStyle("-fx-background-color: rgba(10, 10, 30, 0.7); -fx-background-radius: 15;");
 
         StackPane root = new StackPane();
-        ImageView background = loadBackgroundImage("/img.jpg");
+        ImageView background = loadBestBackground();
         setupBackgroundImage(background);
         animateBackground(background);
         root.getChildren().add(background);
 
-        Rectangle overlay = new Rectangle(WINDOW_WIDTH, WINDOW_HEIGHT);
-        overlay.setFill(new LinearGradient(0, 0, 0, 1, true, CycleMethod.NO_CYCLE,
-                new Stop(0, Color.TRANSPARENT),
-                new Stop(0.3, Color.rgb(0, 0, 0, 0.5)),
-                new Stop(1, Color.rgb(0, 0, 0, 0.7))
-        ));
+        Rectangle overlay = createOverlay();
         root.getChildren().add(overlay);
 
         Label title = new Label("SIGN UP");
-        title.setFont(Font.font("Agency FB", FontWeight.EXTRA_BOLD, 46));
-        title.setTextFill(Color.WHITE);
+        title.setFont(Font.font(FONT_FAMILIES[0], FontWeight.EXTRA_BOLD, 46));
+        title.setTextFill(COLORS.get("LIGHT"));
 
-        DropShadow glow = new DropShadow(15, Color.web(COLOR_ACCENT));
+        DropShadow glow = new DropShadow(15, COLORS.get("ACCENT"));
         glow.setSpread(0.3);
         Bloom bloom = new Bloom(0.3);
         title.setEffect(new Blend(BlendMode.SCREEN, bloom, glow));
@@ -522,10 +554,10 @@ public class JeuDeTir extends Application {
         PasswordField passwordField = createStylizedPasswordField("Enter your Password");
         PasswordField passwordField1 = createStylizedPasswordField("Confirm your Password");
 
-        Button signupBtn = createActionButton("SIGN UP", COLOR_ACCENT);
+        Button signupBtn = createActionButton("SIGN UP", "ACCENT");
         signupBtn.setPrefWidth(200);
 
-        Button backBtn = createActionButton("Return", "gray");
+        Button backBtn = createActionButton("Return", "DARK");
         backBtn.setPrefWidth(200);
 
         backBtn.setOnAction(e -> {
@@ -545,21 +577,6 @@ public class JeuDeTir extends Application {
         animateFormEntrance(signupBox);
     }
 
-    private ImageView loadBackgroundImage(String... paths) {
-        try {
-            for (String path : paths) {
-                InputStream is = getClass().getResourceAsStream(path);
-                if (is != null) {
-                    Image image = new Image(is);
-                    return new ImageView(image);
-                }
-            }
-        } catch (Exception e) {
-            System.err.println("Erreur de chargement de l'image de fond: " + e.getMessage());
-        }
-        return createDefaultBackground();
-    }
-
     private void animateFormEntrance(VBox form) {
         FadeTransition fade = new FadeTransition(Duration.seconds(0.8), form);
         fade.setToValue(1);
@@ -569,21 +586,27 @@ public class JeuDeTir extends Application {
 
         ParallelTransition parallel = new ParallelTransition(fade, slide);
         parallel.play();
+        activeAnimations.add(parallel);
     }
 
     private TextField createStylizedTextField(String promptText) {
         TextField field = new TextField();
         field.setPromptText(promptText);
-        field.setStyle("-fx-background-color: rgba(255,255,255,0.15); -fx-text-fill: white; " +
-                "-fx-prompt-text-fill: lightgray; -fx-padding: 12; -fx-background-radius: 8;");
+        field.setStyle("-fx-background-color: rgba(255,255,255,0.15); " +
+                "-fx-text-fill: white; -fx-prompt-text-fill: lightgray; " +
+                "-fx-padding: 12; -fx-background-radius: 8;");
         field.setPrefWidth(300);
 
         field.focusedProperty().addListener((obs, oldVal, newVal) -> {
             if (newVal) {
-                field.setStyle(field.getStyle() + "-fx-background-color: rgba(255,255,255,0.25); -fx-effect: dropshadow(gaussian, " + COLOR_PRIMARY + ", 5, 0.5, 0, 0);");
+                field.setStyle(field.getStyle() +
+                        "-fx-background-color: rgba(255,255,255,0.25); " +
+                        "-fx-effect: dropshadow(gaussian, " + toHex(COLORS.get("PRIMARY")) + ", 5, 0.5, 0, 0);");
             } else {
-                field.setStyle(field.getStyle().replace("-fx-background-color: rgba(255,255,255,0.25);", "-fx-background-color: rgba(255,255,255,0.15);")
-                        .replace("-fx-effect: dropshadow(gaussian, " + COLOR_PRIMARY + ", 5, 0.5, 0, 0);", ""));
+                field.setStyle(field.getStyle()
+                        .replace("-fx-background-color: rgba(255,255,255,0.25);",
+                                "-fx-background-color: rgba(255,255,255,0.15);")
+                        .replace("-fx-effect: dropshadow(gaussian, " + toHex(COLORS.get("PRIMARY")) + ", 5, 0.5, 0, 0);", ""));
             }
         });
 
@@ -593,70 +616,50 @@ public class JeuDeTir extends Application {
     private PasswordField createStylizedPasswordField(String promptText) {
         PasswordField field = new PasswordField();
         field.setPromptText(promptText);
-        field.setStyle("-fx-background-color: rgba(255,255,255,0.15); -fx-text-fill: white; " +
-                "-fx-prompt-text-fill: lightgray; -fx-padding: 12; -fx-background-radius: 8;");
+        field.setStyle("-fx-background-color: rgba(255,255,255,0.15); " +
+                "-fx-text-fill: white; -fx-prompt-text-fill: lightgray; " +
+                "-fx-padding: 12; -fx-background-radius: 8;");
         field.setPrefWidth(300);
 
         field.focusedProperty().addListener((obs, oldVal, newVal) -> {
             if (newVal) {
-                field.setStyle(field.getStyle() + "-fx-background-color: rgba(255,255,255,0.25); -fx-effect: dropshadow(gaussian, " + COLOR_PRIMARY + ", 5, 0.5, 0, 0);");
+                field.setStyle(field.getStyle() +
+                        "-fx-background-color: rgba(255,255,255,0.25); " +
+                        "-fx-effect: dropshadow(gaussian, " + toHex(COLORS.get("PRIMARY")) + ", 5, 0.5, 0, 0);");
             } else {
-                field.setStyle(field.getStyle().replace("-fx-background-color: rgba(255,255,255,0.25);", "-fx-background-color: rgba(255,255,255,0.15);")
-                        .replace("-fx-effect: dropshadow(gaussian, " + COLOR_PRIMARY + ", 5, 0.5, 0, 0);", ""));
+                field.setStyle(field.getStyle()
+                        .replace("-fx-background-color: rgba(255,255,255,0.25);",
+                                "-fx-background-color: rgba(255,255,255,0.15);")
+                        .replace("-fx-effect: dropshadow(gaussian, " + toHex(COLORS.get("PRIMARY")) + ", 5, 0.5, 0, 0);", ""));
             }
         });
 
         return field;
     }
 
-    private StackPane createAnimatedBackground() {
-        StackPane background = new StackPane();
-        background.setStyle("-fx-background-color: linear-gradient(to bottom, #1a2a6c, #b21f1f);");
-
-        Pane particleLayer = new Pane();
-        for (int i = 0; i < 60; i++) {
-            Circle particle = new Circle(Math.random() * 2 + 1);
-            particle.setFill(Color.rgb(255, 255, 255, Math.random() * 0.5 + 0.2));
-            particle.setCenterX(Math.random() * WINDOW_WIDTH);
-            particle.setCenterY(Math.random() * WINDOW_HEIGHT);
-
-            particleLayer.getChildren().add(particle);
-
-            TranslateTransition float2 = new TranslateTransition(Duration.seconds(Math.random() * 5 + 3), particle);
-            float2.setByX(20 * (Math.random() - 0.5));
-            float2.setCycleCount(Animation.INDEFINITE);
-            float2.setAutoReverse(true);
-            float2.play();
-        }
-
-        background.getChildren().add(particleLayer);
-        return background;
-    }
     private void startGame() {
         Pane gamePane = new Pane();
         gamePane.setPrefSize(WINDOW_WIDTH, WINDOW_HEIGHT);
 
-        ImageView gameBackground = loadBackgroundImage("/backround.jpg");
-        setupBackgroundImage(gameBackground);
-        animateBackground(gameBackground);
+        ImageView gameBackground = loadBestBackground();
+        gameBackground.setCache(true);
+        gamePane.getChildren().add(gameBackground);
 
         Rectangle overlay = new Rectangle(WINDOW_WIDTH, WINDOW_HEIGHT);
         overlay.setFill(new LinearGradient(0, 0, 0, 1, true, CycleMethod.NO_CYCLE,
                 new Stop(0, Color.TRANSPARENT),
                 new Stop(1, Color.rgb(0, 0, 0, 0.3))
         ));
+        gamePane.getChildren().add(overlay);
 
-        gamePane.getChildren().addAll(gameBackground, overlay);
-
-        ImageView player = createPlayerAirplane();
+        player = createPlayerAirplane();
+        player.setCache(true);
         gamePane.getChildren().add(player);
 
-        HUD hud = new HUD();
+        EnhancedHUD hud = new EnhancedHUD();
         gamePane.getChildren().add(hud);
-        StackPane.setAlignment(hud, Pos.TOP_LEFT);
 
-        setupPlayerMovement(gamePane, player);
-        setupShootingMechanics(gamePane, player, hud);
+        setupEnhancedControls(gamePane, player, hud);
         setupEnemySpawning(gamePane, hud);
 
         Scene gameScene = new Scene(gamePane, WINDOW_WIDTH, WINDOW_HEIGHT);
@@ -666,138 +669,198 @@ public class JeuDeTir extends Application {
     }
 
     private ImageView createPlayerAirplane() {
-        try {
-            InputStream is = getClass().getResourceAsStream("/airplane.png");
-            Image image = new Image(is);
-            ImageView airplane = new ImageView(image);
-            airplane.setFitWidth(200);
-            airplane.setFitHeight(60);
-            airplane.setPreserveRatio(true);
-            airplane.setX(WINDOW_WIDTH / 2 - 40);
-            airplane.setY(WINDOW_HEIGHT - 100);
-            return airplane;
+        try (InputStream is = getClass().getResourceAsStream("/airplane.png")) {
+            if (is != null) {
+                Image image = new Image(is);
+                ImageView airplane = new ImageView(image);
+                airplane.setFitWidth(200);
+                airplane.setFitHeight(60);
+                airplane.setPreserveRatio(true);
+                airplane.setX(WINDOW_WIDTH / 2 - 40);
+                airplane.setY(WINDOW_HEIGHT - 100);
+                return airplane;
+            }
         } catch (Exception e) {
-            Polygon airplane = new Polygon(0.0, 20.0, 15.0, 0.0, 30.0, 20.0, 25.0, 20.0, 25.0, 40.0, 5.0, 40.0, 5.0, 20.0);
-            airplane.setFill(Color.BLUE);
-            airplane.setStroke(Color.WHITE);
-            airplane.setLayoutX(WINDOW_WIDTH / 2 - 15);
-            airplane.setLayoutY(WINDOW_HEIGHT - 100);
-            return new ImageView(airplane.snapshot(null, null));
+            System.err.println("Erreur de chargement du vaisseau: " + e.getMessage());
+        }
+
+        // Fallback si l'image n'est pas trouvée
+        Polygon airplane = new Polygon(0.0, 20.0, 15.0, 0.0, 30.0, 20.0,
+                25.0, 20.0, 25.0, 40.0, 5.0, 40.0, 5.0, 20.0);
+        airplane.setFill(COLORS.get("PRIMARY"));
+        airplane.setStroke(COLORS.get("LIGHT"));
+        ImageView fallback = new ImageView(airplane.snapshot(null, null));
+        fallback.setX(WINDOW_WIDTH / 2 - 15);
+        fallback.setY(WINDOW_HEIGHT - 100);
+        return fallback;
+    }
+
+    private void setupEnhancedControls(Pane gamePane, ImageView player, EnhancedHUD hud) {
+        final double[] speed = {8}; // Variable modifiable
+
+        gamePane.setOnKeyPressed(e -> {
+            if (!gameRunning) return;
+
+            switch (e.getCode()) {
+                case LEFT:
+                    player.setX(Math.max(0, player.getX() - speed[0]));
+                    break;
+                case RIGHT:
+                    player.setX(Math.min(WINDOW_WIDTH - player.getFitWidth(), player.getX() + speed[0]));
+                    break;
+                case UP:
+                    player.setY(Math.max(WINDOW_HEIGHT / 2, player.getY() - speed[0]));
+                    break;
+                case DOWN:
+                    player.setY(Math.min(WINDOW_HEIGHT - player.getFitHeight(), player.getY() + speed[0]));
+                    break;
+                case SPACE:
+                    fireEnhancedLaser(gamePane, player, hud);
+                    break;
+                case P:
+                    togglePause();
+                    break;
+                case ESCAPE:
+                    returnToMenu();
+                    break;
+            }
+        });
+    }
+
+    private void fireEnhancedLaser(Pane gamePane, ImageView player, EnhancedHUD hud) {
+        Rectangle bullet = new Rectangle(4, 20, Color.LIMEGREEN);
+        bullet.setX(player.getX() + player.getFitWidth() / 2 - 2);
+        bullet.setY(player.getY());
+        bullet.setArcWidth(5);
+        bullet.setArcHeight(5);
+        bullet.setEffect(new Glow(0.8));
+        gamePane.getChildren().add(bullet);
+
+        Timeline bulletMovement = new Timeline(
+                new KeyFrame(Duration.millis(16), event -> {
+                    bullet.setY(bullet.getY() - 12);
+
+                    checkLaserCollisions(gamePane, bullet, hud);
+
+                    if (bullet.getY() < 0) {
+                        gamePane.getChildren().remove(bullet);
+                        ((Timeline)event.getSource()).stop();
+                    }
+                })
+        );
+        bulletMovement.setCycleCount(Animation.INDEFINITE);
+        bulletMovement.play();
+        activeAnimations.add(bulletMovement);
+    }
+
+    private void checkLaserCollisions(Pane gamePane, Rectangle bullet, EnhancedHUD hud) {
+        Iterator<ImageView> enemyIterator = enemies.iterator();
+        while (enemyIterator.hasNext()) {
+            ImageView enemy = enemyIterator.next();
+            if (bullet.getBoundsInParent().intersects(enemy.getBoundsInParent())) {
+                gamePane.getChildren().removeAll(bullet, enemy);
+                enemyIterator.remove();
+
+                score += 10;
+                hud.updateScore(score);
+                createExplosion(enemy.getX() + enemy.getFitWidth()/2,
+                        enemy.getY() + enemy.getFitHeight()/2);
+
+                // Arrêter l'animation du laser
+                ((Timeline)bullet.getProperties().get("animation")).stop();
+                return;
+            }
         }
     }
 
-    private void setupPlayerMovement(Pane gamePane, ImageView player) {
-        gamePane.setOnKeyPressed(e -> {
-            double speed = 8;
-            switch (e.getCode()) {
-                case LEFT: if (player.getX() > 0) player.setX(player.getX() - speed); break;
-                case RIGHT: if (player.getX() < WINDOW_WIDTH - player.getFitWidth()) player.setX(player.getX() + speed); break;
-                case UP: if (player.getY() > WINDOW_HEIGHT / 2) player.setY(player.getY() - speed); break;
-                case DOWN: if (player.getY() < WINDOW_HEIGHT - player.getFitHeight()) player.setY(player.getY() + speed); break;
-            }
-        });
-    }
-
-    private void setupShootingMechanics(Pane gamePane, ImageView player, HUD hud) {
-        gamePane.setOnKeyPressed(e -> {
-            if (e.getCode() == KeyCode.SPACE) {
-                Rectangle bullet = new Rectangle(4, 15, Color.YELLOW);
-                bullet.setX(player.getX() + player.getFitWidth() / 2 - 2);
-                bullet.setY(player.getY());
-                gamePane.getChildren().add(bullet);
-
-                Timeline bulletMovement = new Timeline(
-                        new KeyFrame(Duration.millis(16), event -> {
-                            bullet.setY(bullet.getY() - 10);
-                            checkCollisions(gamePane, bullet, hud);
-                            if (bullet.getY() < 0) {
-                                gamePane.getChildren().remove(bullet);
-                                ((Timeline)event.getSource()).stop();
-                            }
-                        })
-                );
-                bulletMovement.setCycleCount(Animation.INDEFINITE);
-                bulletMovement.play();
-            }
-        });
-    }
-
-    private void setupEnemySpawning(Pane gamePane, HUD hud) {
+    private void setupEnemySpawning(Pane gamePane, EnhancedHUD hud) {
         Timeline enemySpawner = new Timeline(
                 new KeyFrame(Duration.seconds(2), event -> {
                     ImageView enemy = createEnemyAirplane();
                     gamePane.getChildren().add(enemy);
+                    enemies.add(enemy);
 
                     Timeline enemyMovement = new Timeline(
                             new KeyFrame(Duration.millis(16), e -> {
                                 enemy.setY(enemy.getY() + 3);
-                                checkPlayerCollision(gamePane, enemy, hud);
+
+                                if (enemy.getBoundsInParent().intersects(player.getBoundsInParent())) {
+                                    handlePlayerHit(gamePane, hud);
+                                    gamePane.getChildren().remove(enemy);
+                                    enemies.remove(enemy);
+                                    ((Timeline)e.getSource()).stop();
+                                }
+
                                 if (enemy.getY() > WINDOW_HEIGHT) {
                                     gamePane.getChildren().remove(enemy);
+                                    enemies.remove(enemy);
                                     ((Timeline)e.getSource()).stop();
                                 }
                             })
                     );
                     enemyMovement.setCycleCount(Animation.INDEFINITE);
                     enemyMovement.play();
+                    activeAnimations.add(enemyMovement);
                 })
         );
         enemySpawner.setCycleCount(Animation.INDEFINITE);
         enemySpawner.play();
+        activeAnimations.add(enemySpawner);
     }
 
     private ImageView createEnemyAirplane() {
-        try {
-            InputStream is = getClass().getResourceAsStream("/enemy_airplane.png");
-            Image image = new Image(is);
-            ImageView enemy = new ImageView(image);
-            enemy.setFitWidth(200);
-            enemy.setFitHeight(45);
-            enemy.setPreserveRatio(true);
-            enemy.setX(Math.random() * (WINDOW_WIDTH - 60));
-            enemy.setY(-60);
-            return enemy;
-        } catch (Exception e) {
-            Polygon enemy = new Polygon(0.0, 0.0, 15.0, 20.0, 30.0, 0.0, 25.0, 0.0, 25.0, -20.0, 5.0, -20.0, 5.0, 0.0);
-            enemy.setFill(Color.RED);
-            enemy.setStroke(Color.WHITE);
-            enemy.setLayoutX(Math.random() * (WINDOW_WIDTH - 30));
-            enemy.setLayoutY(-30);
-            return new ImageView(enemy.snapshot(null, null));
-        }
-    }
-
-    private void checkCollisions(Pane gamePane, Rectangle bullet, HUD hud) {
-        for (Node node : gamePane.getChildren()) {
-            if (node instanceof ImageView && node != gamePane.getChildren().get(0)) {
-                ImageView enemy = (ImageView) node;
-                if (bullet.getBoundsInParent().intersects(enemy.getBoundsInParent())) {
-                    gamePane.getChildren().removeAll(bullet, enemy);
-                    score += 10;
-                    ((Label)hud.getChildren().get(0)).setText("Score: " + score);
-                    createExplosion(gamePane, enemy.getX(), enemy.getY());
-                    return;
-                }
+        try (InputStream is = getClass().getResourceAsStream("/enemy_airplane.png")) {
+            if (is != null) {
+                Image image = new Image(is);
+                ImageView enemy = new ImageView(image);
+                enemy.setFitWidth(200);
+                enemy.setFitHeight(45);
+                enemy.setPreserveRatio(true);
+                enemy.setX(Math.random() * (WINDOW_WIDTH - 60));
+                enemy.setY(-60);
+                return enemy;
             }
+        } catch (Exception e) {
+            System.err.println("Erreur de chargement de l'ennemi: " + e.getMessage());
+        }
+
+        // Fallback si l'image n'est pas trouvée
+        Polygon enemy = new Polygon(0.0, 0.0, 15.0, 20.0, 30.0, 0.0,
+                25.0, 0.0, 25.0, -20.0, 5.0, -20.0, 5.0, 0.0);
+        enemy.setFill(COLORS.get("DANGER"));
+        enemy.setStroke(COLORS.get("LIGHT"));
+        ImageView fallback = new ImageView(enemy.snapshot(null, null));
+        fallback.setX(Math.random() * (WINDOW_WIDTH - 30));
+        fallback.setY(-30);
+        return fallback;
+    }
+
+    private void handlePlayerHit(Pane gamePane, EnhancedHUD hud) {
+        lives--;
+        hud.updateLives(lives);
+
+        if (lives <= 0) {
+            gameOver(gamePane);
+        } else {
+            // Effet de clignotement
+            Timeline blink = new Timeline(
+                    new KeyFrame(Duration.ZERO, new KeyValue(player.opacityProperty(), 0.3)),
+                    new KeyFrame(Duration.seconds(0.1), new KeyValue(player.opacityProperty(), 1.0))
+            );
+            blink.setCycleCount(6);
+            blink.play();
+            activeAnimations.add(blink);
+
+            createExplosion(player.getX() + player.getFitWidth()/2,
+                    player.getY() + player.getFitHeight()/2);
         }
     }
 
-    private void checkPlayerCollision(Pane gamePane, ImageView enemy, HUD hud) {
-        ImageView player = (ImageView) gamePane.getChildren().get(2); // Index du joueur
-        if (enemy.getBoundsInParent().intersects(player.getBoundsInParent())) {
-            gamePane.getChildren().remove(enemy);
-            lives--;
-            ((Label)hud.getChildren().get(1)).setText("Lives: " + lives);
-            createExplosion(gamePane, player.getX(), player.getY());
-            if (lives <= 0) gameOver(gamePane);
-        }
-    }
-
-    private void createExplosion(Pane gamePane, double x, double y) {
+    private void createExplosion(double x, double y) {
         Circle explosion = new Circle(0, Color.ORANGE);
-        explosion.setCenterX(x + 30);
-        explosion.setCenterY(y + 30);
-        explosion.setEffect(new Glow(0.8));
+        explosion.setCenterX(x);
+        explosion.setCenterY(y);
+        explosion.setEffect(new Glow(0.9));
         gamePane.getChildren().add(explosion);
 
         Timeline explosionAnim = new Timeline(
@@ -808,60 +871,159 @@ public class JeuDeTir extends Application {
         );
         explosionAnim.setOnFinished(e -> gamePane.getChildren().remove(explosion));
         explosionAnim.play();
+        activeAnimations.add(explosionAnim);
+    }
+
+    private void togglePause() {
+        gameRunning = !gameRunning;
+        if (gameRunning) {
+            activeAnimations.forEach(Animation::play);
+            showNotification("Game Resumed");
+        } else {
+            activeAnimations.forEach(Animation::pause);
+            showNotification("Game Paused - Press P to continue");
+        }
+    }
+
+    private void returnToMenu() {
+        stopAllAnimations();
+        setupMainMenu();
     }
 
     private void gameOver(Pane gamePane) {
+        gameRunning = false;
+        stopAllAnimations();
+
+        // Création du conteneur Game Over
         VBox gameOverBox = new VBox(20);
         gameOverBox.setAlignment(Pos.CENTER);
         gameOverBox.setStyle("-fx-background-color: rgba(0,0,0,0.8); -fx-background-radius: 15;");
         gameOverBox.setPadding(new Insets(40));
 
+        // Titre Game Over
         Label title = new Label("GAME OVER");
-        title.setFont(Font.font("Agency FB", FontWeight.EXTRA_BOLD, 56));
-        title.setTextFill(Color.WHITE);
+        title.setFont(Font.font(FONT_FAMILIES[0], FontWeight.EXTRA_BOLD, 56));
+        title.setTextFill(COLORS.get("LIGHT"));
 
+        // Affichage du score
         Label scoreLabel = new Label("Final Score: " + score);
-        scoreLabel.setFont(Font.font("Arial", FontWeight.BOLD, 24));
-        scoreLabel.setTextFill(Color.WHITE);
+        scoreLabel.setFont(Font.font(FONT_FAMILIES[1], FontWeight.BOLD, 24));
+        scoreLabel.setTextFill(COLORS.get("LIGHT"));
 
-        Button restartBtn = createActionButton("PLAY AGAIN", COLOR_PRIMARY);
-        Button menuBtn = createActionButton("MAIN MENU", COLOR_SECONDARY);
-
+        // Bouton Play Again
+        Button restartBtn = createActionButton("PLAY AGAIN", "PRIMARY");
+        restartBtn.setPrefWidth(200);
         restartBtn.setOnAction(e -> {
+            // Nettoyage complet avant de recommencer
+            gamePane.getChildren().clear();
+            enemies.clear();
+            activeAnimations.clear();
             score = 0;
             lives = 3;
-            transitionToScene(() -> startGame());
+            gameRunning = true;
+
+            // Transition fluide
+            FadeTransition fadeOut = new FadeTransition(Duration.millis(300), gameOverBox);
+            fadeOut.setFromValue(1.0);
+            fadeOut.setToValue(0.0);
+            fadeOut.setOnFinished(event -> {
+                startGame();
+            });
+            fadeOut.play();
         });
 
+        // Bouton Main Menu
+        Button menuBtn = createActionButton("MAIN MENU", "SECONDARY");
+        menuBtn.setPrefWidth(200);
         menuBtn.setOnAction(e -> {
+            // Nettoyage complet avant de retourner au menu
+            gamePane.getChildren().clear();
+            enemies.clear();
+            activeAnimations.clear();
             score = 0;
             lives = 3;
-            transitionToScene(() -> setupMainMenu());
+
+            // Transition fluide
+            // Transition fluide
+            FadeTransition fadeOut = new FadeTransition(Duration.millis(300), gameOverBox);
+            fadeOut.setFromValue(1.0);
+            fadeOut.setToValue(0.0);
+            fadeOut.setOnFinished(event -> {
+                setupMainMenu();
+            });
+            fadeOut.play();
+
+            // Assemblage des éléments
+            gameOverBox.getChildren().addAll(title, scoreLabel, restartBtn, menuBtn);
+            gameOverBox.setOpacity(0);
+            fadeOut.setOnFinished(event -> {
+                setupMainMenu();
+            });
+            fadeOut.play();
         });
 
+        // Assemblage des éléments
         gameOverBox.getChildren().addAll(title, scoreLabel, restartBtn, menuBtn);
         gameOverBox.setOpacity(0);
-        gamePane.getChildren().add(gameOverBox);
 
+        // Création de l'overlay
+        StackPane overlay = new StackPane(gameOverBox);
+        overlay.setAlignment(Pos.CENTER);
+        overlay.setStyle("-fx-background-color: rgba(0,0,0,0.5);");
+        gamePane.getChildren().add(overlay);
+
+        // Animation d'apparition
         FadeTransition fadeIn = new FadeTransition(Duration.seconds(0.8), gameOverBox);
         fadeIn.setToValue(1);
-        fadeIn.play();
+
+        ScaleTransition scaleIn = new ScaleTransition(Duration.seconds(0.5), gameOverBox);
+        scaleIn.setFromX(0.8);
+        scaleIn.setFromY(0.8);
+        scaleIn.setToX(1.0);
+        scaleIn.setToY(1.0);
+
+        ParallelTransition entrance = new ParallelTransition(fadeIn, scaleIn);
+        entrance.play();
+        activeAnimations.add(entrance);
     }
-    class HUD extends HBox {
-        public HUD() {
-            setStyle("-fx-background-color: rgba(0,0,0,0.5);");
+
+    class EnhancedHUD extends HBox {
+        private Label scoreLabel;
+        private Label livesLabel;
+        private ProgressBar healthBar;
+
+        public EnhancedHUD() {
+            setStyle("-fx-background-color: rgba(0,0,0,0.7);");
             setPadding(new Insets(10));
             setSpacing(20);
+            setAlignment(Pos.TOP_LEFT);
 
-            Label scoreLabel = new Label("Score: 0");
-            scoreLabel.setTextFill(Color.WHITE);
-            scoreLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
+            scoreLabel = createHudLabel("Score: 0", COLORS.get("LIGHT"));
+            livesLabel = createHudLabel("Lives: 3", COLORS.get("LIGHT"));
 
-            Label livesLabel = new Label("Lives: 3");
-            livesLabel.setTextFill(Color.WHITE);
-            livesLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
+            healthBar = new ProgressBar(1.0);
+            healthBar.setStyle("-fx-accent: " + toHex(COLORS.get("DANGER")) + ";");
+            healthBar.setPrefWidth(200);
 
-            getChildren().addAll(scoreLabel, livesLabel);
+            getChildren().addAll(scoreLabel, livesLabel, healthBar);
+            StackPane.setAlignment(this, Pos.TOP_LEFT);
+        }
+
+        private Label createHudLabel(String text, Color color) {
+            Label label = new Label(text);
+            label.setTextFill(color);
+            label.setFont(Font.font(FONT_FAMILIES[1], FontWeight.BOLD, 18));
+            label.setEffect(new DropShadow(5, Color.BLACK));
+            return label;
+        }
+
+        public void updateScore(int score) {
+            scoreLabel.setText("Score: " + score);
+        }
+
+        public void updateLives(int lives) {
+            livesLabel.setText("Lives: " + lives);
+            healthBar.setProgress(lives / 3.0);
         }
     }
 
