@@ -18,6 +18,10 @@ import javafx.util.Duration;
 import java.io.InputStream;
 import javafx.scene.input.KeyCode;
 import javafx.scene.Node;
+import javafx.application.*;
+import java.io.*;
+import java.net.Socket;
+
 
 public class JeuDeTir extends Application {
     private Stage primaryStage;
@@ -30,6 +34,15 @@ public class JeuDeTir extends Application {
     private static final String COLOR_DANGER = "#C73E1D";
     private int score = 0;
     private int lives = 3;
+
+    private Socket socket;
+    private PrintWriter out;
+    private TextArea chatArea;
+    private TextField inputField;
+    private VBox chatContainer;
+    private boolean isChatVisible = false;
+    private double chatOffsetX = 0;
+    private double chatOffsetY = 0;
 
     @Override
     public void start(Stage primaryStage) {
@@ -56,14 +69,102 @@ public class JeuDeTir extends Application {
         Pane particleLayer = createParticleEffect();
         root.getChildren().add(particleLayer);
 
+        // Création de l'UI du chat (masqué par défaut)
+        createChatUI(root);
+
+        // Conteneur principal des boutons
         VBox mainContainer = createMainContainer();
         root.getChildren().add(mainContainer);
+
+        // Bouton de bascule du chat
+        Button toggleChatBtn = createToggleChatButton();
+        root.getChildren().add(toggleChatBtn);
 
         Scene scene = new Scene(root, WINDOW_WIDTH, WINDOW_HEIGHT);
         primaryStage.setScene(scene);
         primaryStage.setMinWidth(1000);
         primaryStage.setMinHeight(700);
+
+        // Initialisation de la connexion chat APRÈS la création de la scène
+        initializeChat();
+
+        // Gestionnaire d'événements pour le déplacement du chat
+        setupChatDrag();
+
         primaryStage.show();
+    }
+
+    // Méthodes supplémentaires ajoutées
+    private void createChatUI(StackPane root) {
+        chatContainer = new VBox(10);
+        chatContainer.setAlignment(Pos.BOTTOM_RIGHT);
+        chatContainer.setPadding(new Insets(20));
+        chatContainer.setVisible(false);
+        chatContainer.setStyle("-fx-background-color: rgba(0,0,0,0.5); -fx-background-radius: 10;");
+
+        // Header du chat avec bouton de fermeture
+        HBox chatHeader = new HBox();
+        chatHeader.setAlignment(Pos.CENTER_RIGHT);
+        Button closeBtn = new Button("×");
+        closeBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: white; -fx-font-size: 20;");
+        closeBtn.setOnAction(e -> toggleChatVisibility());
+        chatHeader.getChildren().add(closeBtn);
+
+        // Zone de chat
+        chatArea = new TextArea();
+        chatArea.setEditable(false);
+        chatArea.setPrefSize(300, 150);
+        chatArea.setStyle("-fx-control-inner-background: #00000080; -fx-text-fill: white;");
+
+        // Champ de saisie
+        inputField = new TextField();
+        inputField.setPromptText("Tapez votre message...");
+        inputField.setStyle("-fx-background-color: #ffffff20; -fx-text-fill: white;");
+        inputField.setOnAction(e -> {
+            if (out != null && !inputField.getText().isEmpty()) {
+                out.println("[Joueur]: " + inputField.getText());
+                inputField.clear();
+            }
+        });
+
+        chatContainer.getChildren().addAll(chatHeader, chatArea, inputField);
+        root.getChildren().add(chatContainer);
+    }
+
+    private Button createToggleChatButton() {
+        Button btn = new Button("Chat");
+        btn.setStyle("-fx-background-color: #2E86AB; -fx-text-fill: white; -fx-padding: 8 15;");
+        StackPane.setAlignment(btn, Pos.BOTTOM_RIGHT);
+        StackPane.setMargin(btn, new Insets(0, 20, 20, 0));
+        btn.setOnAction(e -> toggleChatVisibility());
+        return btn;
+    }
+
+    private void toggleChatVisibility() {
+        isChatVisible = !isChatVisible;
+        chatContainer.setVisible(isChatVisible);
+        chatContainer.setMouseTransparent(!isChatVisible);
+    }
+
+    private void setupChatDrag() {
+        final double[] offset = new double[2];
+
+        chatContainer.setOnMousePressed(e -> {
+            offset[0] = e.getSceneX() - chatContainer.getTranslateX();
+            offset[1] = e.getSceneY() - chatContainer.getTranslateY();
+        });
+
+        chatContainer.setOnMouseDragged(e -> {
+            double newX = e.getSceneX() - offset[0];
+            double newY = e.getSceneY() - offset[1];
+
+            // Limiter le déplacement dans la fenêtre
+            newX = Math.max(-chatContainer.getWidth() + 50, Math.min(newX, WINDOW_WIDTH - 50));
+            newY = Math.max(0, Math.min(newY, WINDOW_HEIGHT - chatContainer.getHeight()));
+
+            chatContainer.setTranslateX(newX);
+            chatContainer.setTranslateY(newY);
+        });
     }
 
     private ImageView loadBackgroundImage() {
@@ -862,6 +963,28 @@ public class JeuDeTir extends Application {
             livesLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
 
             getChildren().addAll(scoreLabel, livesLabel);
+        }
+    }
+
+    private void initializeChat() {
+        try {
+            socket = new Socket("localhost", 7123);
+            out = new PrintWriter(socket.getOutputStream(), true);
+
+            new Thread(() -> {
+                try (BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
+                    String message;
+                    while ((message = in.readLine()) != null) {
+                        String finalMessage = message;
+                        Platform.runLater(() -> chatArea.appendText(finalMessage + "\n"));
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }).start();
+
+        } catch (IOException e) {
+            showNotification("Erreur de connexion au serveur de chat");
         }
     }
 
