@@ -115,4 +115,3 @@ public class GameChat {
         toggleBtn.setTranslateY(windowHeight - 50);
     }
 }
-

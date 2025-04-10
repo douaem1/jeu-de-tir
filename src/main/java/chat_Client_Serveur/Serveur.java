@@ -43,7 +43,7 @@ public class Serveur {
             e.printStackTrace();
         }
     }
-//main methode to intantiate object from it and run it
+    //main methode to intantiate object from it and run it
     public static void main(String[] args) throws IOException {
         //port number is 7103: it is saying that our server will be listening for clients that are making cnx to this port num
         //client will say hey i wanna talk on port num 7103

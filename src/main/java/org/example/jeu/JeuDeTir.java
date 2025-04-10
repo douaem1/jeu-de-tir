@@ -17,6 +17,8 @@ import java.io.*;
 import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
+import DAO.users;
+
 
 public class JeuDeTir extends Application {
 
@@ -496,6 +498,11 @@ public class JeuDeTir extends Application {
         score = 0;
         lives = 3;
         gameRunning = true;
+        ImageView background = loadBestBackground();
+        gamepane.getChildren().add(background);
+        animateBackground(background);
+        player = createPlayer();
+        gamepane.getChildren().add(player);
 
         // Initialisation du HUD
         HUD();
@@ -530,8 +537,8 @@ public class JeuDeTir extends Application {
 
     private void animateEnemy(ImageView enemy) {
         Timeline animation = new Timeline(
-                new KeyFrame(Duration.millis(100), e -> {
-                    enemy.setY(enemy.getY() + 1.5);
+                new KeyFrame(Duration.millis(1000), e -> {
+                    enemy.setY(enemy.getY() + 0.5);
                     checkPlayerCollision(enemy); // Vérifie les collisions à chaque frame
                 })
         );
@@ -580,15 +587,16 @@ public class JeuDeTir extends Application {
                             enemy.getY() + enemy.getFitHeight()/2);
 
                     // Mettre à jour le score
-                    score += 5;
+                    score += 10;
                     scoreLabel.setText("SCORE: " + score); // Mise à jour directe du label
+
+
                 });
                 return true;
             }
             return false;
         });
     }
-
     private ImageView createEnemyAirplane() {
         try {
             // 1. Essayer de charger l'image depuis les ressources
@@ -598,8 +606,8 @@ public class JeuDeTir extends Application {
                 ImageView enemy = new ImageView(enemyImage);
 
                 // Générer des dimensions aléatoires pour la largeur et la hauteur
-                double width = 120; // Largeur entre 80 et 150
-                double height = 90;  // Hauteur entre 30 et 60
+                double width = 100; // Largeur entre 80 et 150
+                double height = 50;  // Hauteur entre 30 et 60
 
                 // Appliquer les dimensions aléatoires
                 enemy.setFitWidth(width);
@@ -741,7 +749,7 @@ public class JeuDeTir extends Application {
     }
 
     public void HUD() {
-        // this.uiFactory = new UIFactory();
+       // this.uiFactory = new UIFactory();
         this.hudContainer = new BorderPane();
         initializeHUD();
     }
@@ -832,6 +840,53 @@ public class JeuDeTir extends Application {
         return label;
     }
 
+    public void updateScore(int score) {
+        this.score = score;
+        scoreLabel.setText("SCORE: " + score);
+
+        // Animation pour le score
+        ScaleTransition scaleUp = new ScaleTransition(Duration.millis(100), scoreLabel);
+        scaleUp.setToX(1.2);
+        scaleUp.setToY(1.2);
+
+        ScaleTransition scaleDown = new ScaleTransition(Duration.millis(100), scoreLabel);
+        scaleDown.setToX(1.0);
+        scaleDown.setToY(1.0);
+
+        scaleUp.setOnFinished(e -> scaleDown.play());
+        scaleUp.play();
+    }
+
+    private void checkLaserCollisions(Pane gamePane, Rectangle bullet, HBox hud) {
+        Iterator<ImageView> enemyIterator = enemies.iterator();
+        while (enemyIterator.hasNext()) {
+            ImageView enemy = enemyIterator.next();
+            if (bullet.getBoundsInParent().intersects(enemy.getBoundsInParent())) {
+                // Supprimer les éléments
+                gamePane.getChildren().removeAll(bullet, enemy);
+                enemyIterator.remove();
+
+                // Mettre à jour le score
+                score += 10;
+                updateScore(score);
+
+                // Créer une explosion
+                createExplosion(enemy.getX() + enemy.getFitWidth()/2,
+                        enemy.getY() + enemy.getFitHeight()/2);
+
+                // Arrêter l'animation du laser
+                Animation bulletAnim = (Animation)bullet.getProperties().get("animation");
+                if (bulletAnim != null) {
+                    bulletAnim.stop();
+                }
+                return;
+            }
+        }
+    }
+
+
+
+
     private void startGameThreads() {
         // Thread de mise à jour du jeu
         gameExecutor.submit(() -> {
@@ -854,7 +909,7 @@ public class JeuDeTir extends Application {
 
     private void updateGameState() {
         updateEnemies();
-        //Rectangle laser=null;
+       // Rectangle laser=null;
         //checkLaserCollisions(gamepane, laser);
         updateHUD();
         try {
@@ -1020,6 +1075,21 @@ public class JeuDeTir extends Application {
         }
     }
 
+    private void spawnEnemy() {
+        try {
+            Image image = new Image(getClass().getResourceAsStream("/enemy.png"));
+            ImageView enemy = new ImageView(image);
+            enemy.setFitWidth(150);
+            enemy.setX(Math.random() * (WINDOW_WIDTH - 150));
+            enemies.add(enemy);
+            gamepane.getChildren().add(enemy);
+            animateEnemy(enemy);
+        } catch (Exception e) {
+            System.err.println("Erreur chargement ennemi: " + e.getMessage());
+        }
+    }
+
+
 
     private void createExplosion(double x, double y) {
         Circle explosion = new Circle(x, y, 0, Color.ORANGERED);
@@ -1066,6 +1136,16 @@ public class JeuDeTir extends Application {
         setupMainMenu();
     }
 
+    // ========================= RESEAU =========================
+    private void connectToChat() {
+        try {
+            socket = new Socket("localhost", 7123);
+            out = new PrintWriter(socket.getOutputStream(), true);
+            startChatListener();
+        } catch (IOException e) {
+            System.err.println("Erreur connexion chat: " + e.getMessage());
+        }
+    }
 
     private void startChatListener() {
         gameExecutor.submit(() -> {
@@ -1140,7 +1220,71 @@ public class JeuDeTir extends Application {
         gamepane.getChildren().add(hudContainer);
     }
 
+    private void showSignInScene() {
+        VBox loginBox = new VBox(20);
+        loginBox.setAlignment(Pos.CENTER);
+        loginBox.setPadding(new Insets(40));
+        loginBox.setMaxWidth(500);
+        loginBox.setStyle("-fx-background-color: rgba(10, 10, 30, 0.7); -fx-background-radius: 15;");
 
+        StackPane root = new StackPane();
+        ImageView background = loadBestBackground();
+        setupBackgroundImage(background);
+        animateBackground(background);
+        root.getChildren().add(background);
+
+        Rectangle overlay = createOverlay();
+        root.getChildren().add(overlay);
+
+        Label title = new Label("SIGN IN");
+        title.setFont(Font.font(FONT_FAMILIES[0], FontWeight.EXTRA_BOLD, 46));
+        title.setTextFill(COLORS.get("LIGHT"));
+
+        DropShadow glow = new DropShadow(15, COLORS.get("PRIMARY"));
+        glow.setSpread(0.3);
+        Bloom bloom = new Bloom(0.3);
+        title.setEffect(new Blend(BlendMode.SCREEN, bloom, glow));
+        animateTextGlow(title, glow);
+
+        TextField usernameField = createStylizedTextField("Username");
+        PasswordField passwordField = createStylizedPasswordField("Password");
+
+
+
+        Button loginBtn = createActionButton("SIGN IN", "PRIMARY");
+        loginBtn.setPrefWidth(200);
+
+        Button backBtn = createActionButton("Return", "DARK");
+        backBtn.setPrefWidth(200);
+
+        backBtn.setOnAction(e -> {
+            playButtonPressAnimation(backBtn);
+            transitionToScene(() -> setupMainMenu());
+        });
+
+        loginBox.getChildren().addAll(title, usernameField, passwordField, loginBtn, backBtn);
+
+        loginBox.setOpacity(0);
+        loginBox.setTranslateY(20);
+        root.getChildren().add(loginBox);
+
+        Scene loginScene = new Scene(root, WINDOW_WIDTH, WINDOW_HEIGHT);
+        primaryStage.setScene(loginScene);
+
+        animateFormEntrance(loginBox);
+
+        loginBtn.setOnAction(e -> {
+            String username = usernameField.getText();
+            String password = passwordField.getText();
+            users user =new users();
+            boolean isValid = user.verifyUser(username, password);
+            if(isValid) {
+                showNotification("Sign in successful!");
+            }else{
+                showNotification("Incorrect username or password or inexistant account (Sign up first)");
+            }
+        });
+    }
 
     private void showSignUpScene() {
         VBox signupBox = new VBox(20);
@@ -1170,10 +1314,37 @@ public class JeuDeTir extends Application {
 
         TextField usernameField = createStylizedTextField("Enter your Username");
         PasswordField passwordField = createStylizedPasswordField("Enter your Password");
-        PasswordField confirmPasswordField = createStylizedPasswordField("Confirm your Password");
-
+        PasswordField passwordField1 = createStylizedPasswordField("Confirm your Password");
         Button signupBtn = createActionButton("SIGN UP", "ACCENT");
         signupBtn.setPrefWidth(200);
+
+        //Recuperation Input
+        signupBtn.setOnAction(e -> {
+            playButtonPressAnimation(signupBtn);
+
+            String username = usernameField.getText();
+            String password = passwordField.getText();
+            String confirmPassword = passwordField1.getText();
+            if (username.isEmpty()|| confirmPassword.isEmpty() || password.isEmpty() ){
+                showNotification("Please fill in all fields.");
+                return;
+            }
+            if(!password.equals(confirmPassword)){
+                showNotification("Passwords do not match!");
+                return;
+            }
+            users newUser = new users(username, password);
+            if (newUser.userExists(username)) {
+                showNotification("Username already exists. Please choose another one.");
+                return;
+            }else {
+                System.out.println("Tentative d'inscription avec :" + username + " et " + password);
+
+                newUser.addUser(newUser);
+
+                showNotification("Account created successfully!");
+            }
+        });
 
         Button backBtn = createActionButton("Return", "DARK");
         backBtn.setPrefWidth(200);
@@ -1183,7 +1354,8 @@ public class JeuDeTir extends Application {
             transitionToScene(() -> setupMainMenu());
         });
 
-        signupBox.getChildren().addAll(title, usernameField, passwordField, confirmPasswordField, signupBtn, backBtn);
+        signupBox.getChildren().addAll(title, usernameField, passwordField, passwordField1, signupBtn, backBtn);
+
         signupBox.setOpacity(0);
         signupBox.setTranslateY(20);
         root.getChildren().add(signupBox);
@@ -1192,56 +1364,8 @@ public class JeuDeTir extends Application {
         primaryStage.setScene(signupScene);
 
         animateFormEntrance(signupBox);
-    }
 
-    private void showSignInScene() {
-        VBox loginBox = new VBox(20);
-        loginBox.setAlignment(Pos.CENTER);
-        loginBox.setPadding(new Insets(40));
-        loginBox.setMaxWidth(500);
-        loginBox.setStyle("-fx-background-color: rgba(10, 10, 30, 0.7); -fx-background-radius: 15;");
 
-        StackPane root = new StackPane();
-        ImageView background = loadBestBackground();
-        setupBackgroundImage(background);
-        animateBackground(background);
-        root.getChildren().add(background);
-        Rectangle overlay = createOverlay();
-        root.getChildren().add(overlay);
-
-        Label title = new Label("SIGN IN");
-        title.setFont(Font.font(FONT_FAMILIES[0], FontWeight.EXTRA_BOLD, 46));
-        title.setTextFill(COLORS.get("LIGHT"));
-
-        DropShadow glow = new DropShadow(15, COLORS.get("PRIMARY"));
-        glow.setSpread(0.3);
-        Bloom bloom = new Bloom(0.3);
-        title.setEffect(new Blend(BlendMode.SCREEN, bloom, glow));
-        animateTextGlow(title, glow);
-
-        TextField usernameField = createStylizedTextField("Username");
-        PasswordField passwordField = createStylizedPasswordField("Password");
-
-        Button loginBtn = createActionButton("SIGN IN", "PRIMARY");
-        loginBtn.setPrefWidth(200);
-
-        Button backBtn = createActionButton("Return", "DARK");
-        backBtn.setPrefWidth(200);
-
-        backBtn.setOnAction(e -> {
-            playButtonPressAnimation(backBtn);
-            transitionToScene(() -> setupMainMenu());
-        });
-
-        loginBox.getChildren().addAll(title, usernameField, passwordField, loginBtn, backBtn);
-        loginBox.setOpacity(0);
-        loginBox.setTranslateY(20);
-        root.getChildren().add(loginBox);
-
-        Scene loginScene = new Scene(root, WINDOW_WIDTH, WINDOW_HEIGHT);
-        primaryStage.setScene(loginScene);
-
-        animateFormEntrance(loginBox);
     }
     private void animateFormEntrance(VBox form) {
         FadeTransition fade = new FadeTransition(Duration.seconds(0.8), form);

@@ -34,27 +34,27 @@ public class ClientHandler implements Runnable {
     }
     //everything in this run methode is what is run in a separate thread
     //separate thread :  listen to mssgs wich is a blocking operation(prog stuck til the operation is completed)
-   @Override
+    @Override
     public void run() {
         //hold a mssg received from a client
-       String mssgFromClient;
-       //while we're connected to a client let's listen for mssgs
-       while (socket.isConnected()) {
-           //read from our bufferedReader
-           try {
-               //prog will hold here til we receive a mssg from a client
-               //we want to run this on a separate thread so the rest of our game isn't stopped by this line (blocking operation)
-               mssgFromClient = bufferedReader.readLine();
-               broadcastMssg(mssgFromClient);
-           }catch (IOException e){
-               closeEverything(socket,bufferedReader,bufferedWriter);
-               //when the client disconnects this will break us out of the while loop
-               break;
-           }
-       }
+        String mssgFromClient;
+        //while we're connected to a client let's listen for mssgs
+        while (socket.isConnected()) {
+            //read from our bufferedReader
+            try {
+                //prog will hold here til we receive a mssg from a client
+                //we want to run this on a separate thread so the rest of our game isn't stopped by this line (blocking operation)
+                mssgFromClient = bufferedReader.readLine();
+                broadcastMssg(mssgFromClient);
+            }catch (IOException e){
+                closeEverything(socket,bufferedReader,bufferedWriter);
+                //when the client disconnects this will break us out of the while loop
+                break;
+            }
+        }
 
-   }
-   public void broadcastMssg(String mssg){
+    }
+    public void broadcastMssg(String mssg){
         for (ClientHandler clientHandler : clientHandlers) {
             try {
                 //we want to broadcast the mssg to everyone except the user who sent it
@@ -69,8 +69,8 @@ public class ClientHandler implements Runnable {
                 closeEverything(socket,bufferedReader,bufferedWriter);
             }
         }
-   }
-   //methode to signal that a user left the chat : user disconnected
+    }
+    //methode to signal that a user left the chat : user disconnected
     public void removeClientHandler(){
         //remove the clienthandler from the arraylist
         clientHandlers.remove(this);
