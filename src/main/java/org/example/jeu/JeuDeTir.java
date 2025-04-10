@@ -1,7 +1,7 @@
 package org.example.jeu;
-
 import javafx.animation.*;
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.geometry.*;
 import javafx.scene.*;
 import javafx.scene.control.*;
@@ -13,70 +13,63 @@ import javafx.scene.shape.*;
 import javafx.scene.text.*;
 import javafx.stage.Stage;
 import javafx.util.Duration;
-import java.io.InputStream;
-import javafx.scene.input.KeyCode;
-import javafx.scene.Node;
-import java.util.*;
 import java.io.*;
-import javafx.application.*;
 import java.net.*;
+import java.util.*;
+import java.util.concurrent.*;
 
 public class JeuDeTir extends Application {
-    private Stage primaryStage;
+
+    // Configuration
     private static final int WINDOW_WIDTH = 1200;
     private static final int WINDOW_HEIGHT = 800;
-
     private static final String[] BACKGROUND_PATHS = {"/img.jpg", "/background.jpg", "/backround.jpg"};
     private static final String[] FONT_FAMILIES = {"Agency FB", "Arial", "Bank Gothic"};
-    private ImageView player;
-    private List<ImageView> enemies = new ArrayList<>();
-    private Pane gamePane;
-    private static final String GAME_BACKGROUND_PATH = "/background.jpg";
-    // Couleurs avec palette étendue
-    private static final Map<String, Color> COLORS = Map.of(
+    private final Map<String, Color> COLORS = Map.of(
             "PRIMARY", Color.web("#2E86AB"),
             "SECONDARY", Color.web("#F18F01"),
-            "ACCENT", Color.web("#A23B72"),
             "DANGER", Color.web("#C73E1D"),
             "LIGHT", Color.web("#F5F5F5"),
-            "DARK", Color.web("#121212")
+            "ACCENT", Color.web("#A23B72"),  // Ajouté
+            "DARK", Color.web("#1A1A2E")
     );
+
+    // Éléments du jeu
+    private Stage primaryStage;
+    private ImageView player;
+    private final CopyOnWriteArrayList<ImageView> enemies = new CopyOnWriteArrayList<>();
+    private final CopyOnWriteArrayList<Animation> activeAnimations = new CopyOnWriteArrayList<>();
+    private int score = 0;
+    private int lives = 3;
+    private Pane gamepane;  // Conteneur principal du jeu
+
+    // Dans la section Éléments du jeu
+
+    private BorderPane hudContainer;
+    private Label scoreLabel;
+    private Label levelLabel;
+    private ProgressBar healthBar;
+    private Label healthLabel;
+    private Label ammoLabel;
+    private Label notificationLabel;
+
+    // Variables de contrôle du mouvement
+    private volatile boolean movingLeft = false;
+    private volatile boolean movingRight = false;
+    private volatile boolean movingUp = false;
+    private volatile boolean movingDown = false;
+    private volatile boolean firing = false;
+    private final double PLAYER_SPEED = 5.0;
+    private final double LASER_SPEED = 10.0;
+
+    // Threads
+    private ExecutorService gameExecutor = Executors.newFixedThreadPool(3);
+    private volatile boolean gameRunning = false;
+
+    // Chat
     private Socket socket;
     private PrintWriter out;
     private TextArea chatArea;
-    private TextField inputField;
-    private VBox chatContainer;
-    private boolean isChatVisible = false;
-    private double chatOffsetX = 0;
-    private double chatOffsetY = 0;
-
-    private int score = 0;
-    private int lives = 3;
-    private boolean gameRunning = true;
-    private List<Animation> activeAnimations = new ArrayList<>();
-
-    @Override
-    public void start(Stage primaryStage) {
-        this.primaryStage = primaryStage;
-        primaryStage.setTitle("Jet Fighters Premium Deluxe");
-        setupMainMenu();
-        player = null;
-        enemies.clear();
-        gamePane = null;
-
-        // Configuration supplémentaire de la fenêtre
-        primaryStage.setMinWidth(1000);
-        primaryStage.setMinHeight(700);
-        primaryStage.setOnCloseRequest(e -> {
-            stopAllAnimations();
-            primaryStage.close();
-        });
-    }
-
-    private void stopAllAnimations() {
-        activeAnimations.forEach(Animation::stop);
-    }
-
     private void setupMainMenu() {
         StackPane root = new StackPane();
         // Chargement optimisé du fond
@@ -92,99 +85,33 @@ public class JeuDeTir extends Application {
         root.getChildren().add(createParticleEffect());
 
         // Création de l'UI du chat (masqué par défaut)
-        createChatUI(root);
+        //createChatUI(root);
 
         // Contenu principal
         VBox mainContainer = createMainContainer();
         root.getChildren().add(mainContainer);
 
         // Bouton de bascule du chat
-        Button toggleChatBtn = createToggleChatButton();
-        root.getChildren().add(toggleChatBtn);
+        //Button toggleChatBtn = createToggleChatButton();
+        //root.getChildren().add(toggleChatBtn);
 
         Scene scene = new Scene(root, WINDOW_WIDTH, WINDOW_HEIGHT);
         primaryStage.setScene(scene);
 
         // Initialisation de la connexion chat APRÈS la création de la scène
-        initializeChat();
+        //initializeChat();
         // Gestionnaire d'événements pour le déplacement du chat
-        setupChatDrag();
+        //setupChatDrag();
 
         primaryStage.show();
     }
-
-    private void createChatUI(StackPane root) {
-        chatContainer = new VBox(10);
-        chatContainer.setAlignment(Pos.BOTTOM_RIGHT);
-        chatContainer.setPadding(new Insets(20));
-        chatContainer.setVisible(false);
-        chatContainer.setStyle("-fx-background-color: rgba(0,0,0,0.5); -fx-background-radius: 10;");
-
-        // Header du chat avec bouton de fermeture
-        HBox chatHeader = new HBox();
-        chatHeader.setAlignment(Pos.CENTER_RIGHT);
-        Button closeBtn = new Button("×");
-        closeBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: white; -fx-font-size: 20;");
-        closeBtn.setOnAction(e -> toggleChatVisibility());
-        chatHeader.getChildren().add(closeBtn);
-
-        // Zone de chat
-        chatArea = new TextArea();
-        chatArea.setEditable(false);
-        chatArea.setPrefSize(300, 150);
-        chatArea.setStyle("-fx-control-inner-background: #00000080; -fx-text-fill: white;");
-
-        // Champ de saisie
-        inputField = new TextField();
-        inputField.setPromptText("Tapez votre message...");
-        inputField.setStyle("-fx-background-color: #ffffff20; -fx-text-fill: white;");
-        inputField.setOnAction(e -> {
-            if (out != null && !inputField.getText().isEmpty()) {
-                out.println("[Joueur]: " + inputField.getText());
-                inputField.clear();
-            }
-        });
-
-        chatContainer.getChildren().addAll(chatHeader, chatArea, inputField);
-        root.getChildren().add(chatContainer);
+    @Override
+    public void start(Stage primaryStage) {
+        this.primaryStage = primaryStage;
+        setupMainMenu();
+        primaryStage.setTitle("Jet Fighters ");
+        primaryStage.show();
     }
-
-    private Button createToggleChatButton() {
-        Button btn = new Button("Chat");
-        btn.setStyle("-fx-background-color: #2E86AB; -fx-text-fill: white; -fx-padding: 8 15;");
-        StackPane.setAlignment(btn, Pos.BOTTOM_RIGHT);
-        StackPane.setMargin(btn, new Insets(0, 20, 20, 0));
-        btn.setOnAction(e -> toggleChatVisibility());
-        return btn;
-    }
-
-    private void toggleChatVisibility() {
-        isChatVisible = !isChatVisible;
-        chatContainer.setVisible(isChatVisible);
-        chatContainer.setMouseTransparent(!isChatVisible);
-    }
-
-    private void setupChatDrag() {
-        final double[] offset = new double[2];
-
-        chatContainer.setOnMousePressed(e -> {
-            offset[0] = e.getSceneX() - chatContainer.getTranslateX();
-            offset[1] = e.getSceneY() - chatContainer.getTranslateY();
-        });
-
-        chatContainer.setOnMouseDragged(e -> {
-            double newX = e.getSceneX() - offset[0];
-            double newY = e.getSceneY() - offset[1];
-
-            // Limiter le déplacement dans la fenêtre
-            newX = Math.max(-chatContainer.getWidth() + 50, Math.min(newX, WINDOW_WIDTH - 50));
-            newY = Math.max(0, Math.min(newY, WINDOW_HEIGHT - chatContainer.getHeight()));
-
-            chatContainer.setTranslateX(newX);
-            chatContainer.setTranslateY(newY);
-        });
-    }
-
     private ImageView loadBestBackground() {
         for (String path : BACKGROUND_PATHS) {
             try (InputStream is = getClass().getResourceAsStream(path)) {
@@ -199,17 +126,6 @@ public class JeuDeTir extends Application {
             }
         }
         return createDefaultBackground();
-    }
-
-    private Rectangle createOverlay() {
-        Rectangle overlay = new Rectangle(WINDOW_WIDTH, WINDOW_HEIGHT);
-        overlay.setFill(new LinearGradient(
-                0, 0, 0, 1, true, CycleMethod.NO_CYCLE,
-                new Stop(0, Color.TRANSPARENT),
-                new Stop(0.3, Color.rgb(0, 0, 0, 0.5)),
-                new Stop(1, Color.rgb(0, 0, 0, 0.8))
-        ));
-        return overlay;
     }
 
     private ImageView createDefaultBackground() {
@@ -252,36 +168,7 @@ public class JeuDeTir extends Application {
         activeAnimations.add(parallelTransition);
     }
 
-    private Pane createParticleEffect() {
-        Pane particlePane = new Pane();
-        particlePane.setPrefSize(WINDOW_WIDTH, WINDOW_HEIGHT);
-
-        for (int i = 0; i < 50; i++) {
-            Circle particle = new Circle(Math.random() * 2 + 0.5);
-            particle.setFill(Color.rgb(255, 255, 255, Math.random() * 0.6 + 0.2));
-            particle.setCenterX(Math.random() * WINDOW_WIDTH);
-            particle.setCenterY(Math.random() * WINDOW_HEIGHT);
-
-            Glow glow = new Glow(0.8);
-            particle.setEffect(glow);
-
-            particlePane.getChildren().add(particle);
-
-            Timeline timeline = new Timeline(
-                    new KeyFrame(Duration.ZERO,
-                            new KeyValue(particle.opacityProperty(), Math.random() * 0.5 + 0.2)),
-                    new KeyFrame(Duration.seconds(Math.random() * 3 + 1),
-                            new KeyValue(particle.opacityProperty(), Math.random() * 0.8 + 0.5))
-            );
-            timeline.setCycleCount(Animation.INDEFINITE);
-            timeline.setAutoReverse(true);
-            timeline.play();
-            activeAnimations.add(timeline);
-        }
-
-        return particlePane;
-    }
-
+    // ========================= MENU PRINCIPAL =========================
     private VBox createMainContainer() {
         VBox container = new VBox(25);
         container.setAlignment(Pos.CENTER);
@@ -312,32 +199,6 @@ public class JeuDeTir extends Application {
 
         return label;
     }
-
-    private void animateTextGlow(Label label, DropShadow glow) {
-        Timeline glowTimeline = new Timeline(
-                new KeyFrame(Duration.ZERO, new KeyValue(glow.radiusProperty(), 15)),
-                new KeyFrame(Duration.seconds(2), new KeyValue(glow.radiusProperty(), 25)),
-                new KeyFrame(Duration.seconds(4), new KeyValue(glow.radiusProperty(), 15))
-        );
-        glowTimeline.setCycleCount(Animation.INDEFINITE);
-
-        Timeline colorTimeline = new Timeline(
-                new KeyFrame(Duration.ZERO,
-                        new KeyValue(glow.colorProperty(), COLORS.get("PRIMARY"))),
-                new KeyFrame(Duration.seconds(3),
-                        new KeyValue(glow.colorProperty(), COLORS.get("SECONDARY"))),
-                new KeyFrame(Duration.seconds(6),
-                        new KeyValue(glow.colorProperty(), COLORS.get("ACCENT"))),
-                new KeyFrame(Duration.seconds(9),
-                        new KeyValue(glow.colorProperty(), COLORS.get("PRIMARY")))
-        );
-        colorTimeline.setCycleCount(Animation.INDEFINITE);
-
-        ParallelTransition parallel = new ParallelTransition(glowTimeline, colorTimeline);
-        parallel.play();
-        activeAnimations.add(parallel);
-    }
-
     private Label createSubtitleLabel() {
         Label label = new Label("Only the Fastest Survive the Sky");
         label.setFont(Font.font(FONT_FAMILIES[2], FontWeight.SEMI_BOLD, 35));
@@ -363,7 +224,6 @@ public class JeuDeTir extends Application {
 
         return label;
     }
-
     private VBox createActionButtons() {
         VBox buttonBox = new VBox(15);
         buttonBox.setAlignment(Pos.CENTER);
@@ -407,72 +267,25 @@ public class JeuDeTir extends Application {
         buttonBox.getChildren().addAll(startBtn, signUpBtn, signInBtn, quitBtn);
         return buttonBox;
     }
+    private void animateMenuEntrance(VBox container) {
+        FadeTransition fade = new FadeTransition(Duration.seconds(1.2), container);
+        fade.setFromValue(0);
+        fade.setToValue(1);
 
-    private Button createActionButton(String text, String colorKey) {
-        Color color = COLORS.get(colorKey);
-        String hexColor = toHex(color);
+        TranslateTransition slide = new TranslateTransition(Duration.seconds(1), container);
+        slide.setFromY(30);
+        slide.setToY(0);
 
-        Button btn = new Button(text);
-        btn.setStyle("-fx-background-color: " + hexColor + "; " +
-                "-fx-text-fill: white; " +
-                "-fx-font-weight: bold; " +
-                "-fx-font-size: 18; " +
-                "-fx-padding: 15 0; " +
-                "-fx-background-radius: 30; " +
-                "-fx-cursor: hand; " +
-                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 5, 0, 0, 2);");
-        btn.setAlignment(Pos.CENTER);
+        ScaleTransition scale = new ScaleTransition(Duration.seconds(1.2), container);
+        scale.setFromX(0.95);
+        scale.setFromY(0.95);
+        scale.setToX(1.0);
+        scale.setToY(1.0);
 
-        btn.setOnMouseEntered(e -> {
-            String lightenedColor = toHex(color.brighter());
-            btn.setStyle(btn.getStyle().replace(hexColor, lightenedColor) +
-                    "-fx-effect: dropshadow(gaussian, " + hexColor + ", 15, 0.5, 0, 0);");
-
-            ScaleTransition pulse = new ScaleTransition(Duration.millis(300), btn);
-            pulse.setToX(1.05);
-            pulse.setToY(1.05);
-            pulse.play();
-            activeAnimations.add(pulse);
-        });
-
-        btn.setOnMouseExited(e -> {
-            btn.setStyle(btn.getStyle()
-                    .replace(toHex(color.brighter()), hexColor)
-                    .replace("-fx-effect:.*;", "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 5, 0, 0, 2);"));
-
-            ScaleTransition resetScale = new ScaleTransition(Duration.millis(300), btn);
-            resetScale.setToX(1.0);
-            resetScale.setToY(1.0);
-            resetScale.play();
-            activeAnimations.add(resetScale);
-        });
-
-        return btn;
+        ParallelTransition parallel = new ParallelTransition(fade, slide, scale);
+        parallel.play();
+        activeAnimations.add(parallel);
     }
-
-    private void playButtonPressAnimation(Button button) {
-        ScaleTransition scaleDown = new ScaleTransition(Duration.millis(100), button);
-        scaleDown.setToX(0.95);
-        scaleDown.setToY(0.95);
-
-        ScaleTransition scaleUp = new ScaleTransition(Duration.millis(100), button);
-        scaleUp.setToX(1.0);
-        scaleUp.setToY(1.0);
-
-        SequentialTransition sequence = new SequentialTransition(scaleDown, scaleUp);
-        sequence.play();
-        activeAnimations.add(sequence);
-    }
-
-    private void fadeOutAndClose() {
-        FadeTransition fade = new FadeTransition(Duration.millis(800), primaryStage.getScene().getRoot());
-        fade.setFromValue(1.0);
-        fade.setToValue(0.0);
-        fade.setOnFinished(e -> primaryStage.close());
-        fade.play();
-        activeAnimations.add(fade);
-    }
-
     private void transitionToScene(Runnable sceneSetup) {
         StackPane root = (StackPane) primaryStage.getScene().getRoot();
 
@@ -493,31 +306,27 @@ public class JeuDeTir extends Application {
         activeAnimations.add(fadeIn);
     }
 
-    private String toHex(Color color) {
-        return String.format("#%02x%02x%02x",
-                (int)(color.getRed() * 255),
-                (int)(color.getGreen() * 255),
-                (int)(color.getBlue() * 255));
+    private void fadeOutAndClose() {
+        FadeTransition fade = new FadeTransition(Duration.millis(800), primaryStage.getScene().getRoot());
+        fade.setFromValue(1.0);
+        fade.setToValue(0.0);
+        fade.setOnFinished(e -> primaryStage.close());
+        fade.play();
+        activeAnimations.add(fade);
     }
 
-    private void animateMenuEntrance(VBox container) {
-        FadeTransition fade = new FadeTransition(Duration.seconds(1.2), container);
-        fade.setFromValue(0);
-        fade.setToValue(1);
+    private void playButtonPressAnimation(Button button) {
+        ScaleTransition scaleDown = new ScaleTransition(Duration.millis(100), button);
+        scaleDown.setToX(0.95);
+        scaleDown.setToY(0.95);
 
-        TranslateTransition slide = new TranslateTransition(Duration.seconds(1), container);
-        slide.setFromY(30);
-        slide.setToY(0);
+        ScaleTransition scaleUp = new ScaleTransition(Duration.millis(100), button);
+        scaleUp.setToX(1.0);
+        scaleUp.setToY(1.0);
 
-        ScaleTransition scale = new ScaleTransition(Duration.seconds(1.2), container);
-        scale.setFromX(0.95);
-        scale.setFromY(0.95);
-        scale.setToX(1.0);
-        scale.setToY(1.0);
-
-        ParallelTransition parallel = new ParallelTransition(fade, slide, scale);
-        parallel.play();
-        activeAnimations.add(parallel);
+        SequentialTransition sequence = new SequentialTransition(scaleDown, scaleUp);
+        sequence.play();
+        activeAnimations.add(sequence);
     }
 
     private void showNotification(String message) {
@@ -566,121 +375,70 @@ public class JeuDeTir extends Application {
         activeAnimations.add(sequence);
     }
 
-    private void showSignInScene() {
-        VBox loginBox = new VBox(20);
-        loginBox.setAlignment(Pos.CENTER);
-        loginBox.setPadding(new Insets(40));
-        loginBox.setMaxWidth(500);
-        loginBox.setStyle("-fx-background-color: rgba(10, 10, 30, 0.7); -fx-background-radius: 15;");
+    private void animateTextGlow(Label label, DropShadow glow) {
+        Timeline glowTimeline = new Timeline(
+                new KeyFrame(Duration.ZERO, new KeyValue(glow.radiusProperty(), 15)),
+                new KeyFrame(Duration.seconds(2), new KeyValue(glow.radiusProperty(), 25)),
+                new KeyFrame(Duration.seconds(4), new KeyValue(glow.radiusProperty(), 15))
+        );
+        glowTimeline.setCycleCount(Animation.INDEFINITE);
 
-        StackPane root = new StackPane();
-        ImageView background = loadBestBackground();
-        setupBackgroundImage(background);
-        animateBackground(background);
-        root.getChildren().add(background);
+        Timeline colorTimeline = new Timeline(
+                new KeyFrame(Duration.ZERO,
+                        new KeyValue(glow.colorProperty(), COLORS.get("PRIMARY"))),
+                new KeyFrame(Duration.seconds(3),
+                        new KeyValue(glow.colorProperty(), COLORS.get("SECONDARY"))),
+                new KeyFrame(Duration.seconds(6),
+                        new KeyValue(glow.colorProperty(), COLORS.get("ACCENT"))),
+                new KeyFrame(Duration.seconds(9),
+                        new KeyValue(glow.colorProperty(), COLORS.get("PRIMARY")))
+        );
+        colorTimeline.setCycleCount(Animation.INDEFINITE);
 
-        Rectangle overlay = createOverlay();
-        root.getChildren().add(overlay);
-
-        Label title = new Label("SIGN IN");
-        title.setFont(Font.font(FONT_FAMILIES[0], FontWeight.EXTRA_BOLD, 46));
-        title.setTextFill(COLORS.get("LIGHT"));
-
-        DropShadow glow = new DropShadow(15, COLORS.get("PRIMARY"));
-        glow.setSpread(0.3);
-        Bloom bloom = new Bloom(0.3);
-        title.setEffect(new Blend(BlendMode.SCREEN, bloom, glow));
-        animateTextGlow(title, glow);
-
-        TextField usernameField = createStylizedTextField("Username");
-        PasswordField passwordField = createStylizedPasswordField("Password");
-
-        Button loginBtn = createActionButton("SIGN IN", "PRIMARY");
-        loginBtn.setPrefWidth(200);
-
-        Button backBtn = createActionButton("Return", "DARK");
-        backBtn.setPrefWidth(200);
-
-        backBtn.setOnAction(e -> {
-            playButtonPressAnimation(backBtn);
-            transitionToScene(() -> setupMainMenu());
-        });
-
-        loginBox.getChildren().addAll(title, usernameField, passwordField, loginBtn, backBtn);
-
-        loginBox.setOpacity(0);
-        loginBox.setTranslateY(20);
-        root.getChildren().add(loginBox);
-
-        Scene loginScene = new Scene(root, WINDOW_WIDTH, WINDOW_HEIGHT);
-        primaryStage.setScene(loginScene);
-
-        animateFormEntrance(loginBox);
-    }
-
-    private void showSignUpScene() {
-        VBox signupBox = new VBox(20);
-        signupBox.setAlignment(Pos.CENTER);
-        signupBox.setPadding(new Insets(40));
-        signupBox.setMaxWidth(500);
-        signupBox.setStyle("-fx-background-color: rgba(10, 10, 30, 0.7); -fx-background-radius: 15;");
-
-        StackPane root = new StackPane();
-        ImageView background = loadBestBackground();
-        setupBackgroundImage(background);
-        animateBackground(background);
-        root.getChildren().add(background);
-
-        Rectangle overlay = createOverlay();
-        root.getChildren().add(overlay);
-
-        Label title = new Label("SIGN UP");
-        title.setFont(Font.font(FONT_FAMILIES[0], FontWeight.EXTRA_BOLD, 46));
-        title.setTextFill(COLORS.get("LIGHT"));
-
-        DropShadow glow = new DropShadow(15, COLORS.get("ACCENT"));
-        glow.setSpread(0.3);
-        Bloom bloom = new Bloom(0.3);
-        title.setEffect(new Blend(BlendMode.SCREEN, bloom, glow));
-        animateTextGlow(title, glow);
-
-        TextField usernameField = createStylizedTextField("Enter your Username");
-        PasswordField passwordField = createStylizedPasswordField("Enter your Password");
-        PasswordField passwordField1 = createStylizedPasswordField("Confirm your Password");
-
-        Button signupBtn = createActionButton("SIGN UP", "ACCENT");
-        signupBtn.setPrefWidth(200);
-
-        Button backBtn = createActionButton("Return", "DARK");
-        backBtn.setPrefWidth(200);
-
-        backBtn.setOnAction(e -> {
-            playButtonPressAnimation(backBtn);
-            transitionToScene(() -> setupMainMenu());
-        });
-
-        signupBox.getChildren().addAll(title, usernameField, passwordField, passwordField1, signupBtn, backBtn);
-
-        signupBox.setOpacity(0);
-        signupBox.setTranslateY(20);
-        root.getChildren().add(signupBox);
-
-        Scene signupScene = new Scene(root, WINDOW_WIDTH, WINDOW_HEIGHT);
-        primaryStage.setScene(signupScene);
-
-        animateFormEntrance(signupBox);
-    }
-
-    private void animateFormEntrance(VBox form) {
-        FadeTransition fade = new FadeTransition(Duration.seconds(0.8), form);
-        fade.setToValue(1);
-
-        TranslateTransition slide = new TranslateTransition(Duration.seconds(0.6), form);
-        slide.setToY(0);
-
-        ParallelTransition parallel = new ParallelTransition(fade, slide);
+        ParallelTransition parallel = new ParallelTransition(glowTimeline, colorTimeline);
         parallel.play();
         activeAnimations.add(parallel);
+    }
+    private Button createActionButton(String text, String colorKey) {
+        Color color = COLORS.get(colorKey);
+        String hexColor = toHex(color);
+
+        Button btn = new Button(text);
+        btn.setStyle("-fx-background-color: " + hexColor + "; " +
+                "-fx-text-fill: white; " +
+                "-fx-font-weight: bold; " +
+                "-fx-font-size: 18; " +
+                "-fx-padding: 15 0; " +
+                "-fx-background-radius: 30; " +
+                "-fx-cursor: hand; " +
+                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 5, 0, 0, 2);");
+        btn.setAlignment(Pos.CENTER);
+
+        btn.setOnMouseEntered(e -> {
+            String lightenedColor = toHex(color.brighter());
+            btn.setStyle(btn.getStyle().replace(hexColor, lightenedColor) +
+                    "-fx-effect: dropshadow(gaussian, " + hexColor + ", 15, 0.5, 0, 0);");
+
+            ScaleTransition pulse = new ScaleTransition(Duration.millis(300), btn);
+            pulse.setToX(1.05);
+            pulse.setToY(1.05);
+            pulse.play();
+            activeAnimations.add(pulse);
+        });
+
+        btn.setOnMouseExited(e -> {
+            btn.setStyle(btn.getStyle()
+                    .replace(toHex(color.brighter()), hexColor)
+                    .replace("-fx-effect:.*;", "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 5, 0, 0, 2);"));
+
+            ScaleTransition resetScale = new ScaleTransition(Duration.millis(300), btn);
+            resetScale.setToX(1.0);
+            resetScale.setToY(1.0);
+            resetScale.play();
+            activeAnimations.add(resetScale);
+        });
+
+        return btn;
     }
 
     private TextField createStylizedTextField(String promptText) {
@@ -730,211 +488,72 @@ public class JeuDeTir extends Application {
 
         return field;
     }
-
+    // ========================= CORE DU JEU =========================
     private void startGame() {
-        Pane gamePane = new Pane();
-        gamePane.setPrefSize(WINDOW_WIDTH, WINDOW_HEIGHT);
+        gamepane = new Pane();
+        player = createPlayer();
+        gamepane.getChildren().add(player);
+        score = 0;
+        lives = 3;
+        gameRunning = true;
 
-        ImageView gameBackground = loadBestBackground();
-        gameBackground.setCache(true);
-        gamePane.getChildren().add(gameBackground);
+        // Initialisation du HUD
+        HUD();
+        updateHUD();
+        gamepane.getChildren().add(hudContainer);
 
-        Rectangle overlay = new Rectangle(WINDOW_WIDTH, WINDOW_HEIGHT);
-        overlay.setFill(new LinearGradient(0, 0, 0, 1, true, CycleMethod.NO_CYCLE,
-                new Stop(0, Color.TRANSPARENT),
-                new Stop(1, Color.rgb(0, 0, 0, 0.3))
-        ));
-        gamePane.getChildren().add(overlay);
+        setupControls();
+        setupEnemySpawning();
 
-        player = createPlayerAirplane();
-        player.setCache(true);
-        gamePane.getChildren().add(player);
-
-        EnhancedHUD hud = new EnhancedHUD();
-        gamePane.getChildren().add(hud);
-
-        setupEnhancedControls(gamePane, player, hud);
-        setupEnemySpawning(gamePane, hud);
-
-        Scene gameScene = new Scene(gamePane, WINDOW_WIDTH, WINDOW_HEIGHT);
-        gameScene.setOnMouseClicked(event -> gamePane.requestFocus());
+        Scene gameScene = new Scene(gamepane, WINDOW_WIDTH, WINDOW_HEIGHT);
         primaryStage.setScene(gameScene);
-        gamePane.requestFocus();
+
+        // Donner le focus
+        gamepane.requestFocus();
+
+        gameRunning = true;
+        startGameThreads();
     }
-
-    private ImageView createPlayerAirplane() {
-        try (InputStream is = getClass().getResourceAsStream("/airplane.png")) {
-            if (is != null) {
-                Image image = new Image(is);
-                ImageView airplane = new ImageView(image);
-                airplane.setFitWidth(200);
-                airplane.setFitHeight(60);
-                airplane.setPreserveRatio(true);
-                airplane.setX(WINDOW_WIDTH / 2 - 40);
-                airplane.setY(WINDOW_HEIGHT - 100);
-                return airplane;
-            }
-        } catch (Exception e) {
-            System.err.println("Erreur de chargement du vaisseau: " + e.getMessage());
-        }
-
-        // Fallback si l'image n'est pas trouvée
-        Polygon airplane = new Polygon(0.0, 20.0, 15.0, 0.0, 30.0, 20.0,
-                25.0, 20.0, 25.0, 40.0, 5.0, 40.0, 5.0, 20.0);
-        airplane.setFill(COLORS.get("PRIMARY"));
-        airplane.setStroke(COLORS.get("LIGHT"));
-        ImageView fallback = new ImageView(airplane.snapshot(null, null));
-        fallback.setX(WINDOW_WIDTH / 2 - 15);
-        fallback.setY(WINDOW_HEIGHT - 100);
-        return fallback;
-    }
-
-    private void setupEnhancedControls(Pane gamePane, ImageView player, EnhancedHUD hud) {
-        final double[] speed = {8}; // Variable modifiable
-
-        gamePane.setOnKeyPressed(e -> {
-            if (!gameRunning) return;
-
-            switch (e.getCode()) {
-                case LEFT:
-                    player.setX(Math.max(0, player.getX() - speed[0]));
-                    break;
-                case RIGHT:
-                    player.setX(Math.min(WINDOW_WIDTH - player.getFitWidth(), player.getX() + speed[0]));
-                    break;
-                case UP:
-                    player.setY(Math.max(WINDOW_HEIGHT / 2, player.getY() - speed[0]));
-                    break;
-                case DOWN:
-                    player.setY(Math.min(WINDOW_HEIGHT - player.getFitHeight(), player.getY() + speed[0]));
-                    break;
-                case SPACE:
-                    fireEnhancedLaser(gamePane, player, hud);
-                    break;
-                case P:
-                    togglePause();
-                    break;
-                case ESCAPE:
-                    returnToMenu();
-                    break;
-            }
-        });
-    }
-
-    private void fireEnhancedLaser(Pane gamePane, ImageView player, EnhancedHUD hud) {
-        Rectangle bullet = new Rectangle(4, 20, Color.LIMEGREEN);
-        bullet.setX(player.getX() + player.getFitWidth() / 2 - 2);
-        bullet.setY(player.getY());
-        bullet.setArcWidth(5);
-        bullet.setArcHeight(5);
-        bullet.setEffect(new Glow(0.8));
-        gamePane.getChildren().add(bullet);
-
-        Timeline bulletMovement = new Timeline(
-                new KeyFrame(Duration.millis(16), event -> {
-                    bullet.setY(bullet.getY() - 12);
-
-                    checkLaserCollisions(gamePane, bullet, hud);
-
-                    if (bullet.getY() < 0) {
-                        gamePane.getChildren().remove(bullet);
-                        ((Timeline)event.getSource()).stop();
-                    }
-                })
-        );
-        bulletMovement.setCycleCount(Animation.INDEFINITE);
-        bulletMovement.play();
-        activeAnimations.add(bulletMovement);
-    }
-
-    private void checkLaserCollisions(Pane gamePane, Rectangle bullet, EnhancedHUD hud) {
-        Iterator<ImageView> enemyIterator = enemies.iterator();
-        while (enemyIterator.hasNext()) {
-            ImageView enemy = enemyIterator.next();
-            if (bullet.getBoundsInParent().intersects(enemy.getBoundsInParent())) {
-                gamePane.getChildren().removeAll(bullet, enemy);
-                enemyIterator.remove();
-
-                score += 10;
-                hud.updateScore(score);
-                createExplosion(enemy.getX() + enemy.getFitWidth()/2,
-                        enemy.getY() + enemy.getFitHeight()/2);
-
-                // Arrêter l'animation du laser
-                ((Timeline)bullet.getProperties().get("animation")).stop();
-                return;
-            }
-        }
-    }
-
-    private void setupEnemySpawning(Pane gamePane, EnhancedHUD hud) {
+    private void setupEnemySpawning() {
         Timeline enemySpawner = new Timeline(
                 new KeyFrame(Duration.seconds(2), event -> {
                     ImageView enemy = createEnemyAirplane();
-                    gamePane.getChildren().add(enemy);
+                    gamepane.getChildren().add(enemy);
                     enemies.add(enemy);
-
-                    Timeline enemyMovement = new Timeline(
-                            new KeyFrame(Duration.millis(16), e -> {
-                                enemy.setY(enemy.getY() + 3);
-
-                                if (enemy.getBoundsInParent().intersects(player.getBoundsInParent())) {
-                                    handlePlayerHit(gamePane, hud);
-                                    gamePane.getChildren().remove(enemy);
-                                    enemies.remove(enemy);
-                                    ((Timeline)e.getSource()).stop();
-                                }
-
-                                if (enemy.getY() > WINDOW_HEIGHT) {
-                                    gamePane.getChildren().remove(enemy);
-                                    enemies.remove(enemy);
-                                    ((Timeline)e.getSource()).stop();
-                                }
-                            })
-                    );
-                    enemyMovement.setCycleCount(Animation.INDEFINITE);
-                    enemyMovement.play();
-                    activeAnimations.add(enemyMovement);
-                })
-        );
+                    animateEnemy(enemy);
+                }
+                ));
         enemySpawner.setCycleCount(Animation.INDEFINITE);
         enemySpawner.play();
         activeAnimations.add(enemySpawner);
     }
 
-    private ImageView createEnemyAirplane() {
-        try (InputStream is = getClass().getResourceAsStream("/enemy_airplane.png")) {
-            if (is != null) {
-                Image image = new Image(is);
-                ImageView enemy = new ImageView(image);
-                enemy.setFitWidth(200);
-                enemy.setFitHeight(45);
-                enemy.setPreserveRatio(true);
-                enemy.setX(Math.random() * (WINDOW_WIDTH - 60));
-                enemy.setY(-60);
-                return enemy;
-            }
-        } catch (Exception e) {
-            System.err.println("Erreur de chargement de l'ennemi: " + e.getMessage());
-        }
-
-        // Fallback si l'image n'est pas trouvée
-        Polygon enemy = new Polygon(0.0, 0.0, 15.0, 20.0, 30.0, 0.0,
-                25.0, 0.0, 25.0, -20.0, 5.0, -20.0, 5.0, 0.0);
-        enemy.setFill(COLORS.get("DANGER"));
-        enemy.setStroke(COLORS.get("LIGHT"));
-        ImageView fallback = new ImageView(enemy.snapshot(null, null));
-        fallback.setX(Math.random() * (WINDOW_WIDTH - 30));
-        fallback.setY(-30);
-        return fallback;
+    private void animateEnemy(ImageView enemy) {
+        Timeline animation = new Timeline(
+                new KeyFrame(Duration.millis(100), e -> {
+                    enemy.setY(enemy.getY() + 1.5);
+                    checkPlayerCollision(enemy); // Vérifie les collisions à chaque frame
+                })
+        );
+        animation.setCycleCount(Animation.INDEFINITE);
+        animation.play();
+        activeAnimations.add(animation);
     }
 
-    private void handlePlayerHit(Pane gamePane, EnhancedHUD hud) {
+    private void checkPlayerCollision(ImageView enemy) {
+        if (player != null && enemy.getBoundsInParent().intersects(player.getBoundsInParent())) {
+            handlePlayerHit();
+            gamepane.getChildren().remove(enemy);
+            enemies.remove(enemy);
+        }
+    }
+
+    private void handlePlayerHit() {
         lives--;
-        hud.updateLives(lives);
+        updateHUD();
 
         if (lives <= 0) {
-            gameOver(gamePane);
+            gameOver(gamepane);
         } else {
             // Effet de clignotement
             Timeline blink = new Timeline(
@@ -943,47 +562,335 @@ public class JeuDeTir extends Application {
             );
             blink.setCycleCount(6);
             blink.play();
-            activeAnimations.add(blink);
-
-            createExplosion(player.getX() + player.getFitWidth()/2,
-                    player.getY() + player.getFitHeight()/2);
         }
     }
 
-    private void createExplosion(double x, double y) {
-        Circle explosion = new Circle(0, Color.ORANGE);
-        explosion.setCenterX(x);
-        explosion.setCenterY(y);
-        explosion.setEffect(new Glow(0.9));
-        gamePane.getChildren().add(explosion);
+    private void updateHUD() {
+        // Version simplifiée du HUD
+        if (scoreLabel != null) scoreLabel.setText("SCORE: " + score);
 
-        Timeline explosionAnim = new Timeline(
-                new KeyFrame(Duration.ZERO, new KeyValue(explosion.radiusProperty(), 0)),
-                new KeyFrame(Duration.millis(200), new KeyValue(explosion.radiusProperty(), 30)),
-                new KeyFrame(Duration.millis(400), new KeyValue(explosion.radiusProperty(), 50)),
-                new KeyFrame(Duration.millis(600), new KeyValue(explosion.opacityProperty(), 0))
+    }
+
+    private void checkLaserCollisions(Pane gamePane, Rectangle laser) {
+        enemies.removeIf(enemy -> {
+            if (laser.getBoundsInParent().intersects(enemy.getBoundsInParent())) {
+                Platform.runLater(() -> {
+                    gamePane.getChildren().removeAll(laser, enemy);
+                    createExplosion(enemy.getX() + enemy.getFitWidth()/2,
+                            enemy.getY() + enemy.getFitHeight()/2);
+
+                    // Mettre à jour le score
+                    score += 5;
+                    scoreLabel.setText("SCORE: " + score); // Mise à jour directe du label
+                });
+                return true;
+            }
+            return false;
+        });
+    }
+
+    private ImageView createEnemyAirplane() {
+        try {
+            // 1. Essayer de charger l'image depuis les ressources
+            InputStream is = getClass().getResourceAsStream("/enemy.png");
+            if (is != null) {
+                Image enemyImage = new Image(is);
+                ImageView enemy = new ImageView(enemyImage);
+
+                // Générer des dimensions aléatoires pour la largeur et la hauteur
+                double width = 120; // Largeur entre 80 et 150
+                double height = 90;  // Hauteur entre 30 et 60
+
+                // Appliquer les dimensions aléatoires
+                enemy.setFitWidth(width);
+                enemy.setFitHeight(height);
+                enemy.setPreserveRatio(true);
+
+                // Position aléatoire en X, apparition hors écran en Y
+                enemy.setX(Math.random() * (WINDOW_WIDTH - width));
+                enemy.setY(-height);  // Commence au-dessus de l'écran
+
+                // Effet visuel optionnel
+                enemy.setEffect(new DropShadow(10, Color.RED));
+
+                return enemy;
+            }
+        } catch (Exception e) {
+            System.err.println("Erreur de chargement de l'image ennemi: " + e.getMessage());
+        }
+
+        // 2. Fallback graphique si l'image n'est pas trouvée
+        Polygon enemyShape = new Polygon(
+                0.0, 20.0,
+                15.0, 0.0,
+                30.0, 20.0,
+                25.0, 20.0,
+                25.0, 40.0,
+                5.0, 40.0,
+                5.0, 20.0
         );
-        explosionAnim.setOnFinished(e -> gamePane.getChildren().remove(explosion));
-        explosionAnim.play();
-        activeAnimations.add(explosionAnim);
+
+        enemyShape.setFill(COLORS.get("DANGER"));  // Rouge
+        enemyShape.setStroke(COLORS.get("LIGHT")); // Bordure blanche
+        enemyShape.setStrokeWidth(2);
+
+        // Création d'une ImageView à partir du Polygon
+        ImageView fallbackEnemy = new ImageView(enemyShape.snapshot(null, null));
+
+        // Générer des dimensions aléatoires pour le fallback
+        double fallbackWidth = 80 + Math.random() * 70;  // Largeur entre 80 et 150
+        double fallbackHeight = 30 + Math.random() * 30; // Hauteur entre 30 et 60
+
+        // Appliquer les dimensions aléatoires
+        fallbackEnemy.setFitWidth(fallbackWidth);
+        fallbackEnemy.setFitHeight(fallbackHeight);
+        fallbackEnemy.setX(Math.random() * (WINDOW_WIDTH - fallbackWidth));
+        fallbackEnemy.setY(-fallbackHeight);
+
+        return fallbackEnemy;
     }
 
-    private void togglePause() {
-        gameRunning = !gameRunning;
-        if (gameRunning) {
-            activeAnimations.forEach(Animation::play);
-            showNotification("Game Resumed");
-        } else {
-            activeAnimations.forEach(Animation::pause);
-            showNotification("Game Paused - Press P to continue");
+
+    private void initializeGame() {
+        gamepane = new Pane();
+        setupGameBackground();
+
+        player=createPlayer();
+        gamepane.getChildren().add(player);
+        // Vérification de position
+        System.out.println("Position joueur - X: " + player.getX() + " Y: " + player.getY());
+
+        setupHUD();
+        setupControls();
+        primaryStage.setScene(new Scene(gamepane, WINDOW_WIDTH, WINDOW_HEIGHT));
+        gamepane.getChildren().add(player);
+    }
+    private Rectangle createOverlay() {
+        Rectangle overlay = new Rectangle(WINDOW_WIDTH, WINDOW_HEIGHT);
+        overlay.setFill(new LinearGradient(
+                0, 0, 0, 1, true, CycleMethod.NO_CYCLE,
+                new Stop(0, Color.TRANSPARENT),
+                new Stop(0.3, Color.rgb(0, 0, 0, 0.5)),
+                new Stop(1, Color.rgb(0, 0, 0, 0.8))
+        ));
+        return overlay;
+    }
+    private void fireLaser() {
+        Rectangle laser = new Rectangle(5, 20, Color.RED);
+        laser.setX(player.getX() + player.getFitWidth()/2 - 2.5);
+        laser.setY(player.getY());
+        gamepane.getChildren().add(laser);
+
+        // Animation du laser
+        Timeline animation = new Timeline(
+                new KeyFrame(Duration.millis(16), e -> {
+                    laser.setY(laser.getY() - 10);
+                    checkLaserCollisions(gamepane, laser);
+
+                    // Vérifier les collisions
+                    enemies.removeIf(enemy -> {
+                        if (laser.getBoundsInParent().intersects(enemy.getBoundsInParent())) {
+                            gamepane.getChildren().removeAll(laser, enemy);
+                            return true;
+                        }
+                        return false;
+                    });
+
+                    if (laser.getY() < 0) {
+                        gamepane.getChildren().remove(laser);
+                        ((Timeline)e.getSource()).stop();
+                    }
+                })
+        );
+        animation.setCycleCount(Animation.INDEFINITE);
+        animation.play();
+    }
+    private Pane createParticleEffect() {
+        Pane particlePane = new Pane();
+        particlePane.setPrefSize(WINDOW_WIDTH, WINDOW_HEIGHT);
+
+        for (int i = 0; i < 50; i++) {
+            Circle particle = new Circle(Math.random() * 2 + 0.5);
+            particle.setFill(Color.rgb(255, 255, 255, Math.random() * 0.6 + 0.2));
+            particle.setCenterX(Math.random() * WINDOW_WIDTH);
+            particle.setCenterY(Math.random() * WINDOW_HEIGHT);
+
+            Glow glow = new Glow(0.8);
+            particle.setEffect(glow);
+
+            particlePane.getChildren().add(particle);
+
+            Timeline timeline = new Timeline(
+                    new KeyFrame(Duration.ZERO,
+                            new KeyValue(particle.opacityProperty(), Math.random() * 0.5 + 0.2)),
+                    new KeyFrame(Duration.seconds(Math.random() * 3 + 1),
+                            new KeyValue(particle.opacityProperty(), Math.random() * 0.8 + 0.5))
+            );
+            timeline.setCycleCount(Animation.INDEFINITE);
+            timeline.setAutoReverse(true);
+            timeline.play();
+            activeAnimations.add(timeline);
+        }
+
+        return particlePane;
+    }
+    private void setupGameBackground() {
+        ImageView background = loadBestBackground();
+        gamepane.getChildren().add(background);
+        animateBackground(background);
+    }
+
+    public void HUD() {
+        // this.uiFactory = new UIFactory();
+        this.hudContainer = new BorderPane();
+        initializeHUD();
+    }
+
+    private void initializeHUD() {
+        // Top HUD (score, level)
+        HBox topHUD = new HBox(20);
+        topHUD.setPadding(new Insets(10));
+        topHUD.setAlignment(Pos.CENTER);
+
+        scoreLabel = createHUDLabel("SCORE: 0");
+        levelLabel = createHUDLabel("NIVEAU: 1");
+
+        topHUD.getChildren().addAll(scoreLabel, levelLabel);
+
+        // Bottom HUD (health, ammo)
+        HBox bottomHUD = new HBox(20);
+        bottomHUD.setPadding(new Insets(10));
+        bottomHUD.setAlignment(Pos.CENTER);
+
+        // Barre de santé
+        VBox healthBox = new VBox(5);
+        healthBox.setAlignment(Pos.CENTER_LEFT);
+
+        Label healthTitle = createHUDLabel("SANTÉ");
+        healthTitle.setFont(Font.font("Orbitron", FontWeight.BOLD, 12));
+
+        healthBar = new ProgressBar(1.0);
+        healthBar.setPrefWidth(150);
+        healthBar.setStyle(
+                "-fx-accent: linear-gradient(to right, #ff0000, #00ff00);" +
+                        "-fx-control-inner-background: rgba(0, 0, 0, 0.5);" +
+                        "-fx-background-radius: 5;" +
+                        "-fx-border-radius: 5;"
+        );
+
+        healthLabel = createHUDLabel("100%");
+        healthLabel.setFont(Font.font("Orbitron", FontWeight.BOLD, 12));
+
+        healthBox.getChildren().addAll(healthTitle, healthBar, healthLabel);
+
+        // Munitions
+        VBox ammoBox = new VBox(5);
+        ammoBox.setAlignment(Pos.CENTER_RIGHT);
+
+        Label ammoTitle = createHUDLabel("MUNITIONS");
+        ammoTitle.setFont(Font.font("Orbitron", FontWeight.BOLD, 12));
+
+        ammoLabel = createHUDLabel("100");
+        ammoLabel.setFont(Font.font("Orbitron", FontWeight.BOLD, 18));
+
+        ammoBox.getChildren().addAll(ammoTitle, ammoLabel);
+
+        bottomHUD.getChildren().addAll(healthBox, ammoBox);
+
+        // Notification au centre
+        notificationLabel = new Label("");
+        notificationLabel.setFont(Font.font("Orbitron", FontWeight.BOLD, 24));
+        notificationLabel.setTextFill(Color.WHITE);
+        notificationLabel.setOpacity(0);
+        StackPane centerPane = new StackPane(notificationLabel);
+
+        // Assemblage du HUD
+        hudContainer.setTop(topHUD);
+        hudContainer.setBottom(bottomHUD);
+        hudContainer.setCenter(centerPane);
+
+        // Style global
+        hudContainer.setBackground(new Background(new BackgroundFill(
+                Color.rgb(0, 0, 0, 0.5),
+                CornerRadii.EMPTY,
+                Insets.EMPTY
+        )));
+    }
+
+    private Label createHUDLabel(String text) {
+        Label label = new Label(text);
+        label.setFont(Font.font("Orbitron", FontWeight.BOLD, 16));
+        label.setTextFill(Color.WHITE);
+
+        DropShadow shadow = new DropShadow();
+        shadow.setColor(Color.BLACK);
+        shadow.setRadius(2);
+        shadow.setOffsetX(1);
+        shadow.setOffsetY(1);
+        label.setEffect(shadow);
+
+        return label;
+    }
+
+    private void startGameThreads() {
+        // Thread de mise à jour du jeu
+        gameExecutor.submit(() -> {
+            while (gameRunning) {
+                Platform.runLater(this::updateGameState);
+                try { Thread.sleep(16); }
+                catch (InterruptedException e) { break; }
+            }
+        });
+
+        // Thread d'apparition des ennemis
+        gameExecutor.submit(() -> {
+            while (gameRunning) {
+                Platform.runLater(this::createEnemyAirplane);
+                try { Thread.sleep(2000); }
+                catch (InterruptedException e) { break; }
+            }
+        });
+    }
+
+    private void updateGameState() {
+        updateEnemies();
+        //Rectangle laser=null;
+        //checkLaserCollisions(gamepane, laser);
+        updateHUD();
+        try {
+            // Code qui pourrait causer un problème
+        } catch (Exception e) {
+            System.err.println("Erreur détectée: " + e.getMessage());
+            e.printStackTrace();
+            // Continuer le jeu au lieu de planter
         }
     }
 
-    private void returnToMenu() {
-        stopAllAnimations();
-        setupMainMenu();
+    // ========================= LOGIQUE DU JEU =========================
+    private void updateEnemies() {
+        enemies.removeIf(enemy -> {
+            // Mettre à jour la position de l'ennemi
+            enemy.setY(enemy.getY() + 3);
+
+            // Si l'ennemi sort de l'écran
+            if (enemy.getY() > WINDOW_HEIGHT) {
+                Platform.runLater(() -> gamepane.getChildren().remove(enemy));
+                return true; // Supprime l'ennemi de la liste
+            }
+            return false;
+        });
     }
 
+
+    private void stopAllAnimations() {
+        // Arrête toutes les animations et vide la liste
+        for (Animation animation : activeAnimations) {
+            if (animation != null) {
+                animation.stop();
+            }
+        }
+        activeAnimations.clear();  // Nettoie la liste après l'arrêt
+    }
     private void gameOver(Pane gamePane) {
         gameRunning = false;
         stopAllAnimations();
@@ -1081,68 +988,329 @@ public class JeuDeTir extends Application {
         activeAnimations.add(entrance);
     }
 
-    class EnhancedHUD extends HBox {
-        private Label scoreLabel;
-        private Label livesLabel;
-        private ProgressBar healthBar;
-
-        public EnhancedHUD() {
-            setStyle("-fx-background-color: rgba(0,0,0,0.7);");
-            setPadding(new Insets(10));
-            setSpacing(20);
-            setAlignment(Pos.TOP_LEFT);
-
-            scoreLabel = createHudLabel("Score: 0", COLORS.get("LIGHT"));
-            livesLabel = createHudLabel("Lives: 3", COLORS.get("LIGHT"));
-
-            healthBar = new ProgressBar(1.0);
-            healthBar.setStyle("-fx-accent: " + toHex(COLORS.get("DANGER")) + ";");
-            healthBar.setPrefWidth(200);
-
-            getChildren().addAll(scoreLabel, livesLabel, healthBar);
-            StackPane.setAlignment(this, Pos.TOP_LEFT);
-        }
-
-        private Label createHudLabel(String text, Color color) {
-            Label label = new Label(text);
-            label.setTextFill(color);
-            label.setFont(Font.font(FONT_FAMILIES[1], FontWeight.BOLD, 18));
-            label.setEffect(new DropShadow(5, Color.BLACK));
-            return label;
-        }
-
-        public void updateScore(int score) {
-            scoreLabel.setText("Score: " + score);
-        }
-
-        public void updateLives(int lives) {
-            livesLabel.setText("Lives: " + lives);
-            healthBar.setProgress(lives / 3.0);
-        }
-    }
-
-    private void initializeChat() {
+    // ========================= GRAPHIQUES =========================
+    private ImageView createPlayer() {
         try {
-            socket = new Socket("localhost", 7123);
-            out = new PrintWriter(socket.getOutputStream(), true);
+            // 1. Chargement de l'image
+            Image image = new Image(getClass().getResourceAsStream("/airplane.png"));
 
-            new Thread(() -> {
-                try (BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
-                    String message;
-                    while ((message = in.readLine()) != null) {
-                        String finalMessage = message;
-                        Platform.runLater(() -> chatArea.appendText(finalMessage + "\n"));
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }).start();
+            // 2. Création du ImageView
+            ImageView player = new ImageView(image);
 
-        } catch (IOException e) {
-            showNotification("Erreur de connexion au serveur de chat");
+            // 3. Configuration de la taille
+            player.setFitWidth(100);  // Correction de la casse (setFitWidth au lieu de setfitWidth)
+            player.setPreserveRatio(true); // Conserve les proportions
+
+            // 4. Positionnement initial
+            player.setX(WINDOW_WIDTH / 2 - 100); // Centré horizontalement
+            player.setY(WINDOW_HEIGHT - 150);    // 150px du bas
+
+            // 5. Ajout au gamePane (si nécessaire)
+            // gamePane.getChildren().add(player); // Décommenter si besoin
+
+            return player; // Retourne l'objet créé
+
+        } catch (Exception e) {
+            System.err.println("Erreur chargement joueur: " + e.getMessage());
+
+            // Fallback si l'image ne charge pas
+            Rectangle placeholder = new Rectangle(200, 100, Color.BLUE);
+            placeholder.setStroke(Color.WHITE);
+            return new ImageView(placeholder.snapshot(null, null));
         }
     }
 
+
+    private void createExplosion(double x, double y) {
+        Circle explosion = new Circle(x, y, 0, Color.ORANGERED);
+        explosion.setEffect(new Glow(0.8));
+        gamepane.getChildren().add(explosion);
+
+        Timeline timeline = new Timeline(
+                new KeyFrame(Duration.ZERO, new KeyValue(explosion.radiusProperty(), 0)),
+                new KeyFrame(Duration.millis(200), new KeyValue(explosion.radiusProperty(), 30)),
+                new KeyFrame(Duration.millis(400), new KeyValue(explosion.opacityProperty(), 0))
+        );
+        timeline.setOnFinished(e -> gamepane.getChildren().remove(explosion));
+        timeline.play();
+    }
+
+    // ========================= CONTROLES =========================
+    private void setupEnhancedControls(Pane gamePane, ImageView player, Pane hud) {
+        gamePane.setFocusTraversable(true);
+
+        // Gestion des touches
+        gamePane.setOnKeyPressed(e -> {
+            switch (e.getCode()) {
+                case LEFT: movingLeft = true; break;
+                case RIGHT: movingRight = true; break;
+                case UP: movingUp = true; break;
+                case DOWN: movingDown = true; break;
+                case SPACE: firing = true; break;
+            }
+        });
+
+        gamePane.setOnKeyReleased(e -> {
+            switch (e.getCode()) {
+                case LEFT: movingLeft = false; break;
+                case RIGHT: movingRight = false; break;
+                case UP: movingUp = false; break;
+                case DOWN: movingDown = false; break;
+                case SPACE: firing = false; break;
+            }
+        });
+    }
+
+    private void returnToMenu() {
+        stopGame();
+        setupMainMenu();
+    }
+
+
+    private void startChatListener() {
+        gameExecutor.submit(() -> {
+            try (BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
+                String message;
+                while ((message = in.readLine()) != null) {
+                    String finalMessage = message;
+                    Platform.runLater(() -> chatArea.appendText(finalMessage + "\n"));
+                }
+            } catch (IOException e) {
+                Platform.runLater(() -> chatArea.appendText("Déconnecté du chat\n"));
+            }
+        });
+    }
+
+    // ========================= UTILITAIRES =========================
+
+
+    private String toHex(Color color) {
+        return String.format("#%02x%02x%02x",
+                (int)(color.getRed() * 255),
+                (int)(color.getGreen() * 255),
+                (int)(color.getBlue() * 255));
+    }
+
+    @Override
+    public void stop() {
+        stopGame();
+        try {
+            if (socket != null) socket.close();
+        } catch (IOException e) {
+            System.err.println("Erreur fermeture socket: " + e.getMessage());
+        }
+    }
+
+    private void stopGame() {
+        gameRunning = false;
+        gameExecutor.shutdownNow();
+        try {
+            if (!gameExecutor.awaitTermination(800, TimeUnit.MILLISECONDS)) {
+                gameExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            gameExecutor.shutdownNow();
+        }
+        Platform.runLater(() -> {
+            activeAnimations.forEach(Animation::stop);
+            activeAnimations.clear();
+            if (gamepane != null) gamepane.getChildren().clear();
+        });
+    }
+
+    private void setupHUD() {
+        hudContainer = new BorderPane();
+
+        // Top HUD
+        HBox topHUD = new HBox(20);
+        scoreLabel = createHUDLabel("SCORE: 0");
+        levelLabel = createHUDLabel("NIVEAU: 1");
+        topHUD.getChildren().addAll(scoreLabel, levelLabel);
+
+        // Bottom HUD
+        HBox bottomHUD = new HBox(20);
+        healthBar = new ProgressBar(1.0);
+        healthLabel = createHUDLabel("100%");
+        ammoLabel = createHUDLabel("100");
+        bottomHUD.getChildren().addAll(healthBar, healthLabel, ammoLabel);
+
+        hudContainer.setTop(topHUD);
+        hudContainer.setBottom(bottomHUD);
+
+        gamepane.getChildren().add(hudContainer);
+    }
+
+
+
+    private void showSignUpScene() {
+        VBox signupBox = new VBox(20);
+        signupBox.setAlignment(Pos.CENTER);
+        signupBox.setPadding(new Insets(40));
+        signupBox.setMaxWidth(500);
+        signupBox.setStyle("-fx-background-color: rgba(10, 10, 30, 0.7); -fx-background-radius: 15;");
+
+        StackPane root = new StackPane();
+        ImageView background = loadBestBackground();
+        setupBackgroundImage(background);
+        animateBackground(background);
+        root.getChildren().add(background);
+
+        Rectangle overlay = createOverlay();
+        root.getChildren().add(overlay);
+
+        Label title = new Label("SIGN UP");
+        title.setFont(Font.font(FONT_FAMILIES[0], FontWeight.EXTRA_BOLD, 46));
+        title.setTextFill(COLORS.get("LIGHT"));
+
+        DropShadow glow = new DropShadow(15, COLORS.get("ACCENT"));
+        glow.setSpread(0.3);
+        Bloom bloom = new Bloom(0.3);
+        title.setEffect(new Blend(BlendMode.SCREEN, bloom, glow));
+        animateTextGlow(title, glow);
+
+        TextField usernameField = createStylizedTextField("Enter your Username");
+        PasswordField passwordField = createStylizedPasswordField("Enter your Password");
+        PasswordField confirmPasswordField = createStylizedPasswordField("Confirm your Password");
+
+        Button signupBtn = createActionButton("SIGN UP", "ACCENT");
+        signupBtn.setPrefWidth(200);
+
+        Button backBtn = createActionButton("Return", "DARK");
+        backBtn.setPrefWidth(200);
+
+        backBtn.setOnAction(e -> {
+            playButtonPressAnimation(backBtn);
+            transitionToScene(() -> setupMainMenu());
+        });
+
+        signupBox.getChildren().addAll(title, usernameField, passwordField, confirmPasswordField, signupBtn, backBtn);
+        signupBox.setOpacity(0);
+        signupBox.setTranslateY(20);
+        root.getChildren().add(signupBox);
+
+        Scene signupScene = new Scene(root, WINDOW_WIDTH, WINDOW_HEIGHT);
+        primaryStage.setScene(signupScene);
+
+        animateFormEntrance(signupBox);
+    }
+
+    private void showSignInScene() {
+        VBox loginBox = new VBox(20);
+        loginBox.setAlignment(Pos.CENTER);
+        loginBox.setPadding(new Insets(40));
+        loginBox.setMaxWidth(500);
+        loginBox.setStyle("-fx-background-color: rgba(10, 10, 30, 0.7); -fx-background-radius: 15;");
+
+        StackPane root = new StackPane();
+        ImageView background = loadBestBackground();
+        setupBackgroundImage(background);
+        animateBackground(background);
+        root.getChildren().add(background);
+        Rectangle overlay = createOverlay();
+        root.getChildren().add(overlay);
+
+        Label title = new Label("SIGN IN");
+        title.setFont(Font.font(FONT_FAMILIES[0], FontWeight.EXTRA_BOLD, 46));
+        title.setTextFill(COLORS.get("LIGHT"));
+
+        DropShadow glow = new DropShadow(15, COLORS.get("PRIMARY"));
+        glow.setSpread(0.3);
+        Bloom bloom = new Bloom(0.3);
+        title.setEffect(new Blend(BlendMode.SCREEN, bloom, glow));
+        animateTextGlow(title, glow);
+
+        TextField usernameField = createStylizedTextField("Username");
+        PasswordField passwordField = createStylizedPasswordField("Password");
+
+        Button loginBtn = createActionButton("SIGN IN", "PRIMARY");
+        loginBtn.setPrefWidth(200);
+
+        Button backBtn = createActionButton("Return", "DARK");
+        backBtn.setPrefWidth(200);
+
+        backBtn.setOnAction(e -> {
+            playButtonPressAnimation(backBtn);
+            transitionToScene(() -> setupMainMenu());
+        });
+
+        loginBox.getChildren().addAll(title, usernameField, passwordField, loginBtn, backBtn);
+        loginBox.setOpacity(0);
+        loginBox.setTranslateY(20);
+        root.getChildren().add(loginBox);
+
+        Scene loginScene = new Scene(root, WINDOW_WIDTH, WINDOW_HEIGHT);
+        primaryStage.setScene(loginScene);
+
+        animateFormEntrance(loginBox);
+    }
+    private void animateFormEntrance(VBox form) {
+        FadeTransition fade = new FadeTransition(Duration.seconds(0.8), form);
+        fade.setToValue(1);
+
+        TranslateTransition slide = new TranslateTransition(Duration.seconds(0.6), form);
+        slide.setToY(0);
+
+        ParallelTransition parallel = new ParallelTransition(fade, slide);
+        parallel.play();
+        activeAnimations.add(parallel);
+    }
+
+
+    private void setupControls() {
+        gamepane.setFocusTraversable(true);
+        gamepane.requestFocus();
+
+        gamepane.setOnKeyPressed(e -> {
+            if (!gameRunning) return;
+
+            double speed = 8;
+            switch (e.getCode()) {
+                case LEFT:
+                    player.setX(Math.max(0, player.getX() - speed));
+                    break;
+                case RIGHT:
+                    player.setX(Math.min(WINDOW_WIDTH - player.getFitWidth(), player.getX() + speed));
+                    break;
+                case UP:
+                    player.setY(Math.max(0, player.getY() - speed));
+                    break;
+                case DOWN:
+                    player.setY(Math.min(WINDOW_HEIGHT - player.getFitHeight(), player.getY() + speed));
+                    break;
+                case SPACE:
+                    fireEnhancedLaser(gamepane, player, hudContainer); // Utilisez hudContainer ici
+                    break;
+                case ESCAPE:
+                    returnToMenu();
+                    break;
+            }
+        });
+    }
+    private void fireEnhancedLaser(Pane gamePane, ImageView player, Pane hud) {
+        if (!gameRunning) return;
+
+        Rectangle laser = new Rectangle(4, 20, Color.LIMEGREEN);
+        laser.setX(player.getX() + player.getFitWidth()/2 - 2);
+        laser.setY(player.getY());
+        gamePane.getChildren().add(laser);
+
+        AnimationTimer laserAnimation = new AnimationTimer() {
+            @Override
+            public void handle(long now) {
+                laser.setY(laser.getY() - LASER_SPEED);
+
+                // Vérifier les collisions
+                checkLaserCollisions(gamePane, laser);
+
+                // Supprimer le laser s'il sort de l'écran
+                if (laser.getY() < 0 || !gamePane.getChildren().contains(laser)) {
+                    gamePane.getChildren().remove(laser);
+                    this.stop();
+                }
+            }
+        };
+        laserAnimation.start();
+    }
     public static void main(String[] args) {
         launch(args);
     }
