@@ -32,7 +32,7 @@ public class JeuDeTir extends Application {
             "SECONDARY", Color.web("#F18F01"),
             "DANGER", Color.web("#C73E1D"),
             "LIGHT", Color.web("#F5F5F5"),
-            "ACCENT", Color.web("#A23B72"),  // Ajouté
+            "ACCENT", Color.web("#A23B72"),
             "DARK", Color.web("#1A1A2E")
     );
 
@@ -86,24 +86,17 @@ public class JeuDeTir extends Application {
         // Particules optimisées
         root.getChildren().add(createParticleEffect());
 
-        // Création de l'UI du chat (masqué par défaut)
-        //createChatUI(root);
+
 
         // Contenu principal
         VBox mainContainer = createMainContainer();
         root.getChildren().add(mainContainer);
 
-        // Bouton de bascule du chat
-        //Button toggleChatBtn = createToggleChatButton();
-        //root.getChildren().add(toggleChatBtn);
+
 
         Scene scene = new Scene(root, WINDOW_WIDTH, WINDOW_HEIGHT);
         primaryStage.setScene(scene);
 
-        // Initialisation de la connexion chat APRÈS la création de la scène
-        //initializeChat();
-        // Gestionnaire d'événements pour le déplacement du chat
-        //setupChatDrag();
 
         primaryStage.show();
     }
@@ -490,7 +483,7 @@ public class JeuDeTir extends Application {
 
         return field;
     }
-    // ========================= CORE DU JEU =========================
+
     private void startGame() {
         gamepane = new Pane();
         player = createPlayer();
@@ -539,7 +532,7 @@ public class JeuDeTir extends Application {
         Timeline animation = new Timeline(
                 new KeyFrame(Duration.millis(1000), e -> {
                     enemy.setY(enemy.getY() + 0.5);
-                    checkPlayerCollision(enemy); // Vérifie les collisions à chaque frame
+                    checkPlayerCollision(enemy);
                 })
         );
         animation.setCycleCount(Animation.INDEFINITE);
@@ -562,7 +555,7 @@ public class JeuDeTir extends Application {
         if (lives <= 0) {
             gameOver(gamepane);
         } else {
-            // Effet de clignotement
+
             Timeline blink = new Timeline(
                     new KeyFrame(Duration.ZERO, new KeyValue(player.opacityProperty(), 0.3)),
                     new KeyFrame(Duration.seconds(0.1), new KeyValue(player.opacityProperty(), 1.0))
@@ -573,7 +566,7 @@ public class JeuDeTir extends Application {
     }
 
     private void updateHUD() {
-        // Version simplifiée du HUD
+
         if (scoreLabel != null) scoreLabel.setText("SCORE: " + score);
 
     }
@@ -599,7 +592,7 @@ public class JeuDeTir extends Application {
     }
     private ImageView createEnemyAirplane() {
         try {
-            // 1. Essayer de charger l'image depuis les ressources
+            //  charger l'image depuis les ressources
             InputStream is = getClass().getResourceAsStream("/enemy.png");
             if (is != null) {
                 Image enemyImage = new Image(is);
@@ -749,7 +742,7 @@ public class JeuDeTir extends Application {
     }
 
     public void HUD() {
-       // this.uiFactory = new UIFactory();
+        // this.uiFactory = new UIFactory();
         this.hudContainer = new BorderPane();
         initializeHUD();
     }
@@ -909,8 +902,7 @@ public class JeuDeTir extends Application {
 
     private void updateGameState() {
         updateEnemies();
-       // Rectangle laser=null;
-        //checkLaserCollisions(gamepane, laser);
+
         updateHUD();
         try {
             // Code qui pourrait causer un problème
@@ -921,7 +913,7 @@ public class JeuDeTir extends Application {
         }
     }
 
-    // ========================= LOGIQUE DU JEU =========================
+
     private void updateEnemies() {
         enemies.removeIf(enemy -> {
             // Mettre à jour la position de l'ennemi
@@ -1061,7 +1053,7 @@ public class JeuDeTir extends Application {
             player.setY(WINDOW_HEIGHT - 150);    // 150px du bas
 
             // 5. Ajout au gamePane (si nécessaire)
-            // gamePane.getChildren().add(player); // Décommenter si besoin
+
 
             return player; // Retourne l'objet créé
 
@@ -1105,63 +1097,16 @@ public class JeuDeTir extends Application {
         timeline.play();
     }
 
-    // ========================= CONTROLES =========================
-    private void setupEnhancedControls(Pane gamePane, ImageView player, Pane hud) {
-        gamePane.setFocusTraversable(true);
-
-        // Gestion des touches
-        gamePane.setOnKeyPressed(e -> {
-            switch (e.getCode()) {
-                case LEFT: movingLeft = true; break;
-                case RIGHT: movingRight = true; break;
-                case UP: movingUp = true; break;
-                case DOWN: movingDown = true; break;
-                case SPACE: firing = true; break;
-            }
-        });
-
-        gamePane.setOnKeyReleased(e -> {
-            switch (e.getCode()) {
-                case LEFT: movingLeft = false; break;
-                case RIGHT: movingRight = false; break;
-                case UP: movingUp = false; break;
-                case DOWN: movingDown = false; break;
-                case SPACE: firing = false; break;
-            }
-        });
-    }
 
     private void returnToMenu() {
         stopGame();
         setupMainMenu();
     }
 
-    // ========================= RESEAU =========================
-    private void connectToChat() {
-        try {
-            socket = new Socket("localhost", 7123);
-            out = new PrintWriter(socket.getOutputStream(), true);
-            startChatListener();
-        } catch (IOException e) {
-            System.err.println("Erreur connexion chat: " + e.getMessage());
-        }
-    }
 
-    private void startChatListener() {
-        gameExecutor.submit(() -> {
-            try (BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
-                String message;
-                while ((message = in.readLine()) != null) {
-                    String finalMessage = message;
-                    Platform.runLater(() -> chatArea.appendText(finalMessage + "\n"));
-                }
-            } catch (IOException e) {
-                Platform.runLater(() -> chatArea.appendText("Déconnecté du chat\n"));
-            }
-        });
-    }
 
-    // ========================= UTILITAIRES =========================
+
+
 
 
     private String toHex(Color color) {
