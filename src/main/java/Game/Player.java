@@ -1,88 +1,108 @@
 package Game;
 
-
 import javafx.animation.*;
+import javafx.application.Platform;
+import javafx.scene.SnapshotParameters;
 import javafx.scene.image.*;
 import javafx.scene.layout.*;
 import javafx.scene.paint.*;
 import javafx.scene.shape.*;
-import javafx.stage.Stage;
-
-import static Game.GameManager.*;
-
-import java.util.concurrent.CopyOnWriteArrayList;
-  // Package correct
-
-import javafx.scene.image.ImageView;
-import Game.GameManager;
+import javafx.util.Duration;
 
 public class Player {
+    // Référence directe au GameManager parent
+    private GameManager gameManager;
 
-    public Stage primaryStage;
-    public ImageView player;
-    public final CopyOnWriteArrayList<ImageView> enemies = new CopyOnWriteArrayList<>();
-    public final CopyOnWriteArrayList<Animation> activeAnimations = new CopyOnWriteArrayList<>();
-    public int score = 0;
-    public int lives = 3;
-    public Pane gamepane;
-    public final double LASER_SPEED = 10.0;
-    public void fireEnhancedLaser(Pane gamePane, ImageView player, Pane hud) {
-        GameManager gameManager= new GameManager();
-        if (!gameManager.gameRunning) return;
+    // Constantes
+    private final double LASER_SPEED = 10.0;
 
-        Rectangle laser = new Rectangle(4, 20, Color.LIMEGREEN);
-        laser.setX(player.getX() + player.getFitWidth()/2 - 2);
-        laser.setY(player.getY());
-        gamePane.getChildren().add(laser);
+    public Player(GameManager gameManager) {
+        this.gameManager = gameManager;
+    }
 
-        AnimationTimer laserAnimation = new AnimationTimer() {
-            @Override
-            public void handle(long now) {
-                laser.setY(laser.getY() - LASER_SPEED);
-                GameManager gameManager = new GameManager();
+    public void fireEnhancedLaser(Pane gamePane, ImageView player) {
+        System.out.println("Tentative de tir: " + (gameManager != null ? "Manager OK" : "Manager NULL"));
 
-                // Vérifier les collisions
-                gameManager.checkLaserCollisions(gamePane, laser);
+        // Vérification visuelle dans la console pour s'assurer que le tir est tenté
+        System.out.println("Position du laser: X=" + (player.getX() + player.getFitWidth()/2) + ", Y=" + player.getY());
 
-                // Supprimer le laser s'il sort de l'écran
-                if (laser.getY() < 0 || !gamePane.getChildren().contains(laser)) {
-                    gamePane.getChildren().remove(laser);
-                    this.stop();
-                }
-            }
-        };
-        laserAnimation.start();
+        // Création du laser
+        Rectangle laser = new Rectangle(6, 25, Color.LIMEGREEN);
+        laser.setX(player.getX() + player.getFitWidth()/2 - 3);
+        laser.setY(player.getY() - 10); // Commence juste au-dessus du joueur
+
+        // Ajout d'un effet visuel pour mieux voir le laser
+        laser.setArcWidth(4);
+        laser.setArcHeight(4);
+
+        // Ajout du laser à la scène
+        Platform.runLater(() -> {
+            gamePane.getChildren().add(laser);
+            System.out.println("Laser ajouté à la scène");
+        });
+
+        // Animation du mouvement du laser
+        Timeline timeline = new Timeline(
+                new KeyFrame(Duration.millis(16), event -> {
+                    laser.setY(laser.getY() - LASER_SPEED);
+
+                    // Vérification des collisions
+                    if (gameManager != null) {
+                        gameManager.checkLaserCollisions(gamePane, laser);
+                    }
+
+                    // Suppression du laser s'il sort de l'écran
+                    if (laser.getY() < -30) {
+                        Platform.runLater(() -> {
+                            gamePane.getChildren().remove(laser);
+                        });
+                    }
+                })
+        );
+
+        timeline.setCycleCount(Animation.INDEFINITE);
+        timeline.play();
+
+        // Ajouter aux animations actives pour pouvoir l'arrêter plus tard
+        if (gameManager != null) {
+            gameManager.activeAnimations.add(timeline);
+        }
     }
 
     public ImageView createPlayer() {
         try {
-            // 1. Chargement de l'image
+            // Chargement de l'image
             Image image = new Image(getClass().getResourceAsStream("/airplane.png"));
 
-            // 2. Création du ImageView
+            // Création du ImageView
             ImageView player = new ImageView(image);
 
-            // 3. Configuration de la taille
-            player.setFitWidth(100);  // Correction de la casse (setFitWidth au lieu de setfitWidth)
-            player.setPreserveRatio(true); // Conserve les proportions
+            // Configuration de la taille
+            player.setFitWidth(100);
+            player.setPreserveRatio(true);
 
-            // 4. Positionnement initial
-            player.setX(WINDOW_WIDTH / 2 - 100); // Centré horizontalement
-            player.setY(WINDOW_HEIGHT - 150);    // 150px du bas
+            // Positionnement initial
+            player.setX(GameManager.WINDOW_WIDTH / 2 - 50);
+            player.setY(GameManager.WINDOW_HEIGHT - 150);
 
-            // 5. Ajout au gamePane (si nécessaire)
-
-
-            return player; // Retourne l'objet créé
+            return player;
 
         } catch (Exception e) {
             System.err.println("Erreur chargement joueur: " + e.getMessage());
+            e.printStackTrace();
 
             // Fallback si l'image ne charge pas
-            Rectangle placeholder = new Rectangle(200, 100, Color.BLUE);
+            Rectangle placeholder = new Rectangle(100, 60, Color.BLUE);
             placeholder.setStroke(Color.WHITE);
-            return new ImageView(placeholder.snapshot(null, null));
+
+            SnapshotParameters params = new SnapshotParameters();
+            params.setFill(Color.TRANSPARENT);
+
+            ImageView fallback = new ImageView(placeholder.snapshot(params, null));
+            fallback.setX(GameManager.WINDOW_WIDTH / 2 - 50);
+            fallback.setY(GameManager.WINDOW_HEIGHT - 150);
+
+            return fallback;
         }
     }
-
 }

@@ -23,7 +23,7 @@ public class design {
     }
     public   String[] BACKGROUND_PATHS = {"/img.jpg", "/background.jpg", "/backround.jpg"};
     public CopyOnWriteArrayList<Animation> activeAnimations = new CopyOnWriteArrayList<>();
-//    private ImageView loadBestBackground() {
+    //    private ImageView loadBestBackground() {
 //        for (String path : BACKGROUND_PATHS) {
 //            try (InputStream is = getClass().getResourceAsStream(path)) {
 //                if (is != null) {
