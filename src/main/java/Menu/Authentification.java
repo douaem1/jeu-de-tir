@@ -1,7 +1,6 @@
 package Menu;
 import Game.GameManager;
 import javafx.geometry.*;
-import javafx.scene.*;
 import javafx.scene.control.*;
 import javafx.scene.effect.*;
 import javafx.scene.image.*;
@@ -19,19 +18,18 @@ import javafx.scene.control.Button;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.VBox;
-import javafx.stage.Stage;
-import static Game.GameManager.*;
-import Menu.MenuManager;
-import Game.GameManager;
-import org.example.jeu.JeuDeTir;
+
+/**
+ * This class handles the user authentication process, including sign-in and sign-up functionalities.
+ * It provides a graphical user interface for users to input their credentials and interact with the application.
+ */
 
 public class Authentification {
 
-    GameManager gameManager= new GameManager();
     public static int WINDOW_WIDTH = 1200;
-    public static  int WINDOW_HEIGHT = 800;
-    public   String[] BACKGROUND_PATHS = {"/img.jpg", "/background.jpg", "/backround.jpg"};
-    public  String[] FONT_FAMILIES = {"Agency FB", "Arial", "Bank Gothic"};
+    public static int WINDOW_HEIGHT = 800;
+    public String[] BACKGROUND_PATHS = {"/img.jpg", "/background.jpg", "/backround.jpg"};
+    public String[] FONT_FAMILIES = {"Agency FB", "Arial", "Bank Gothic"};
     public Map<String, Color> COLORS = Map.of(
             "PRIMARY", Color.web("#2E86AB"),
             "SECONDARY", Color.web("#F18F01"),
@@ -41,8 +39,14 @@ public class Authentification {
             "DARK", Color.web("#1A1A2E")
     );
     private Stage primaryStage;
-    public void setPrimaryStage(Stage primaryStage) {
+    private GameManager gameManager;
+
+    public Authentification(Stage primaryStage) {
+        if (primaryStage == null) {
+            throw new IllegalArgumentException("primaryStage cannot be null");
+        }
         this.primaryStage = primaryStage;
+        this.gameManager = new GameManager();
     }
 
     public void showSignInScene() {
@@ -60,7 +64,7 @@ public class Authentification {
         design.animateBackground(background);
         root.getChildren().add(background);
         Scene loginScene = new Scene(root, 1200, 800);
-        JeuDeTir.getPrimaryStage().setScene(loginScene);
+        primaryStage.setScene(loginScene);
         Rectangle overlay = design.createOverlay();
         root.getChildren().add(overlay);
 
@@ -77,19 +81,17 @@ public class Authentification {
         TextField usernameField = animation.createStylizedTextField("Username");
         PasswordField passwordField = animation.createStylizedPasswordField("Password");
 
-
-
         Button loginBtn = animation.createActionButton("SIGN IN", "PRIMARY");
         loginBtn.setPrefWidth(200);
 
         Button backBtn = animation.createActionButton("Return", "DARK");
         backBtn.setPrefWidth(200);
 
+        // Correction pour le bouton de retour
         backBtn.setOnAction(e -> {
             animation.playButtonPressAnimation(backBtn);
-            GameManager gameManager = new GameManager();
-            MenuManager menuManager = new MenuManager();
-            menuManager.transitionToScene(() -> gameManager.setupMainMenu());
+            MenuManager menuManager = new MenuManager(primaryStage);
+            menuManager.returnToMenu();
         });
 
         loginBox.getChildren().addAll(title, usernameField, passwordField, loginBtn, backBtn);
@@ -98,25 +100,22 @@ public class Authentification {
         loginBox.setTranslateY(20);
         root.getChildren().add(loginBox);
 
-
-
-
         animation.animateFormEntrance(loginBox);
 
         loginBtn.setOnAction(e -> {
             String username = usernameField.getText();
             String password = passwordField.getText();
-            users user =new users();
+            users user = new users();
             boolean isValid = user.verifyUser(username, password);
-            MenuManager menuManager = new MenuManager();
-            if(isValid) {
-
+            MenuManager menuManager = new MenuManager(primaryStage);
+            if (isValid) {
                 menuManager.showNotification("Sign in successful!");
-            }else{
+            } else {
                 menuManager.showNotification("Incorrect username or password or inexistant account (Sign up first)");
             }
         });
     }
+
     public void showSignUpScene() {
         VBox signupBox = new VBox(20);
         signupBox.setAlignment(Pos.CENTER);
@@ -149,21 +148,20 @@ public class Authentification {
         PasswordField passwordField1 = animation.createStylizedPasswordField("Confirm your Password");
         Button signupBtn = animation.createActionButton("SIGN UP", "ACCENT");
         signupBtn.setPrefWidth(200);
-        MenuManager menuManager = new MenuManager();
+        MenuManager menuManager = new MenuManager(primaryStage);
 
-
-        //Recuperation Input
+        // Récupération Input
         signupBtn.setOnAction(e -> {
-          animation.playButtonPressAnimation(signupBtn);
+            animation.playButtonPressAnimation(signupBtn);
 
             String username = usernameField.getText();
             String password = passwordField.getText();
             String confirmPassword = passwordField1.getText();
-            if (username.isEmpty()|| confirmPassword.isEmpty() || password.isEmpty() ){
+            if (username.isEmpty() || confirmPassword.isEmpty() || password.isEmpty()) {
                 menuManager.showNotification("Please fill in all fields.");
                 return;
             }
-            if(!password.equals(confirmPassword)){
+            if (!password.equals(confirmPassword)) {
                 menuManager.showNotification("Passwords do not match!");
                 return;
             }
@@ -171,7 +169,7 @@ public class Authentification {
             if (newUser.userExists(username)) {
                 menuManager.showNotification("Username already exists. Please choose another one.");
                 return;
-            }else {
+            } else {
                 System.out.println("Tentative d'inscription avec :" + username + " et " + password);
 
                 newUser.addUser(newUser);
@@ -183,9 +181,11 @@ public class Authentification {
         Button backBtn = animation.createActionButton("Return", "DARK");
         backBtn.setPrefWidth(200);
 
+        // Correction pour le bouton de retour
         backBtn.setOnAction(e -> {
             animation.playButtonPressAnimation(backBtn);
-            menuManager.transitionToScene(() -> gameManager.setupMainMenu());
+           // MenuManager menuManager = new MenuManager(primaryStage);
+            menuManager.returnToMenu();
         });
 
         signupBox.getChildren().addAll(title, usernameField, passwordField, passwordField1, signupBtn, backBtn);
@@ -198,8 +198,5 @@ public class Authentification {
         primaryStage.setScene(signupScene);
 
         animation.animateFormEntrance(signupBox);
-
-
     }
-
 }

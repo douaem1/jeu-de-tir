@@ -1,6 +1,5 @@
 package Game;
 
-
 import javafx.animation.*;
 import javafx.application.Platform;
 import javafx.geometry.*;
@@ -19,27 +18,18 @@ import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
 import design.design;
-import Game.Enemy;
-import Game.Player;
-import design.animation;
-import design.HUD;
+import design.*;
 import Menu.MenuManager;
 import Menu.Authentification;
 
-
-// ========================= MENU PRINCIPAL =========================
-
-
-
 public class GameManager {
-
-    private Stage primaryStage;
+    public Stage primaryStage;
     private MenuManager menuManager;
     private Authentification auth;
 
     // Configuration
-    public static int WINDOW_WIDTH = 1200;
-    public static int WINDOW_HEIGHT = 800;
+    public static final int WINDOW_WIDTH = 1200;
+    public static final int WINDOW_HEIGHT = 800;
     public String[] BACKGROUND_PATHS = {"/img.jpg", "/background.jpg", "/backround.jpg"};
     public String[] FONT_FAMILIES = {"Agency FB", "Arial", "Bank Gothic"};
     public Map<String, Color> COLORS = Map.of(
@@ -52,7 +42,6 @@ public class GameManager {
     );
 
     // Éléments du jeu
-
     public ImageView player;
     public CopyOnWriteArrayList<ImageView> enemies = new CopyOnWriteArrayList<>();
     public CopyOnWriteArrayList<Animation> activeAnimations = new CopyOnWriteArrayList<>();
@@ -60,8 +49,7 @@ public class GameManager {
     public int lives = 3;
     public static Pane gamepane;  // Conteneur principal du jeu
 
-    // Dans la section Éléments du jeu
-
+    // Éléments du HUD
     public BorderPane hudContainer;
     public Label scoreLabel;
     public Label levelLabel;
@@ -88,46 +76,117 @@ public class GameManager {
     public PrintWriter out;
     public TextArea chatArea;
 
+    public GameManager() {
+        this.primaryStage = primaryStage;
+    }
 
     public void setPrimaryStage(Stage primaryStage) {
         this.primaryStage = primaryStage;
-        // Transmettre le stage aux autres classes
-        MenuManager menuManager = new MenuManager();
-        menuManager.setPrimaryStage(primaryStage);
-        Authentification auth = new Authentification();
-        auth.setPrimaryStage(primaryStage);
     }
 
+    public  void setupMainMenu() {
+        try {
+            // Création d'un nouveau root
+            StackPane root = new StackPane();
+            design design = new design();
+            animation animation = new animation();
+            animation.setPrimaryStage(primaryStage);
 
-    public void setupMainMenu() {
-        StackPane root = new StackPane();
-        design design = new design();
-        animation animation = new animation();
-        // Chargement optimisé du fond
-        ImageView background = design.loadBestBackground();
-        root.getChildren().add(background);
-        design.animateBackground(background);
+            // Chargement du fond
+            ImageView background = design.loadBestBackground();
+            root.getChildren().add(background);
+            design.animateBackground(background);
 
-        // Overlay avec effet de dégradé amélioré
-        Rectangle overlay = design.createOverlay();
-        root.getChildren().add(overlay);
+            // Overlay avec effet de dégradé
+            Rectangle overlay = design.createOverlay();
+            root.getChildren().add(overlay);
 
-        // Particules optimisées
-        root.getChildren().add(design.createParticleEffect());
+            // Effet de particules
+            root.getChildren().add(design.createParticleEffect());
 
-        // Contenu principal
-        MenuManager menumanager = new MenuManager();
-        VBox mainContainer = menumanager.createMainContainer();
-        root.getChildren().add(mainContainer);
+            // Contenu principal
+            MenuManager menumanager = new MenuManager(primaryStage);
+            VBox mainContainer = menumanager.createMainContainer();
+            root.getChildren().add(mainContainer);
 
-        Scene scene = new Scene(root, WINDOW_WIDTH, WINDOW_HEIGHT);
-        primaryStage.setScene(scene);
+            // Création et application de la scène
+            Scene scene = new Scene(root, WINDOW_WIDTH, WINDOW_HEIGHT);
+            primaryStage.setScene(scene);
 
-        primaryStage.show();
+            System.out.println("Menu principal configuré avec succès");
+        } catch (Exception e) {
+            System.err.println("Erreur lors de la configuration du menu principal: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
+    public HUD hud;
+
+    public void setupHUD() {
+        hud = new HUD();
+        hud.setupHUD();
+        gamepane.getChildren().add(hud.hudContainer);
+    }
+
+    // In GameManager.java, modify the startGame method:
+// Dans le GameManager, remplacez la méthode startGame() comme ceci:
+    public void startGame() {
+        Platform.runLater(() -> {
+            try {
+                // Réinitialiser l'état du jeu
+                gamepane = new Pane();
+                gameRunning = true;
+                enemies.clear();
+                activeAnimations.forEach(Animation::stop);
+                activeAnimations.clear();
+                score = 0;
+                lives = 3;
+
+                // Setup de base
+                ImageView background = new design().loadBestBackground();
+                gamepane.getChildren().add(background);
+
+                // Créer le joueur
+                Player playerClass = new Player(this);
+                player = playerClass.createPlayer();
+                gamepane.getChildren().add(player);
+
+                // IMPORTANT: Initialiser le HUD avec une référence à ce GameManager
+                hud = new HUD(this);
+                hud.setupHUD();
+
+                // S'assurer que la référence au scoreLabel est disponible
+                scoreLabel = hud.scoreLabel;
+
+                // Ajouter le HUD à la scène
+                gamepane.getChildren().add(hud.hudContainer);
+
+                // Setup des contrôles
+                setupControls();
+
+                // Créer la scène
+                Scene gameScene = new Scene(gamepane, WINDOW_WIDTH, WINDOW_HEIGHT);
+                primaryStage.setScene(gameScene);
+                gamepane.requestFocus();
+
+                // Démarrer le jeu
+                setupEnemySpawning();
+                startGameThreads();
+
+                System.out.println("Game started successfully");
+            } catch (Exception e) {
+                e.printStackTrace();
+                System.err.println("Critical error launching game: " + e.getMessage());
+                setupMainMenu();
+            }
+        });
+    }
+    // Et remplacez la méthode setupControls() comme ceci:
     public void setupControls() {
         gamepane.setFocusTraversable(true);
         gamepane.requestFocus();
+
+        // Création d'une instance de Player unique pour gérer les tirs
+        Player playerInstance = new Player(this);  // Passer THIS comme référence
 
         gamepane.setOnKeyPressed(e -> {
             if (!gameRunning) return;
@@ -147,73 +206,57 @@ public class GameManager {
                     player.setY(Math.min(WINDOW_HEIGHT - player.getFitHeight(), player.getY() + speed));
                     break;
                 case SPACE:
-                    Player player1 = new Player();
-                    player1.fireEnhancedLaser(gamepane, player, hudContainer); // Utilisez hudContainer ici
+                    System.out.println("Space key pressed - firing laser");
+                    // Appelle la méthode de tir sans le hud (qui n'est pas nécessaire)
+                    playerInstance.fireEnhancedLaser(gamepane, player);
                     break;
                 case ESCAPE:
-                    MenuManager menumanager = new MenuManager();
-                    menumanager.returnToMenu();
+                    stopGame();
+                    setupMainMenu();
                     break;
             }
         });
     }
 
-    public void startGame() {
-        gamepane = new Pane();
-        Player Player = new Player();
-        design design = new design();
-        animation animation = new animation();
-        player = Player.createPlayer();
-        gamepane.getChildren().add(player);
-        score = 0;
-        lives = 3;
-        gameRunning = true;
-        ImageView background = design.loadBestBackground();
-        gamepane.getChildren().add(background);
-        design.animateBackground(background);
-        player = Player.createPlayer();
-        gamepane.getChildren().add(player);
-
-        // Initialisation du HUD
-        HUD hud = new HUD();
-        hud.HUD();
-        hud.updateHUD();
-        gamepane.getChildren().add(hudContainer);
-
-        setupControls();
-        setupEnemySpawning();
-
-        Scene gameScene = new Scene(gamepane, WINDOW_WIDTH, WINDOW_HEIGHT);
-        primaryStage.setScene(gameScene);
-
-        // Donner le focus
-        gamepane.requestFocus();
-
-        gameRunning = true;
-        startGameThreads();
-    }
-
+// Also modify the setupEnemySpawning method to add CSS class to enemies:
 
     private void setupEnemySpawning() {
         Timeline enemySpawner = new Timeline(
                 new KeyFrame(Duration.seconds(2), event -> {
+                    if (!gameRunning) return;
+
                     Enemy enemy1 = new Enemy();
                     ImageView enemy = enemy1.createEnemyAirplane();
-                    gamepane.getChildren().add(enemy);
-                    enemies.add(enemy);
-                    animateEnemy(enemy);
+                    if (gamepane != null && enemy != null) {
+                        // Add CSS class for identification
+                        enemy.getStyleClass().add("enemy-ship");
+
+                        gamepane.getChildren().add(enemy);
+                        enemies.add(enemy);
+                        animateEnemy(enemy);
+                    }
                 }
                 ));
         enemySpawner.setCycleCount(Animation.INDEFINITE);
         enemySpawner.play();
         activeAnimations.add(enemySpawner);
     }
-
     public void animateEnemy(ImageView enemy) {
         Timeline animation = new Timeline(
-                new KeyFrame(Duration.millis(1000), e -> {
+                new KeyFrame(Duration.millis(8), e -> {
+                    if (!gameRunning) return;
+
                     enemy.setY(enemy.getY() + 0.5);
-                    checkPlayerCollision(enemy);
+                    if (enemy.getY() > WINDOW_HEIGHT) {
+                        Platform.runLater(() -> {
+                            if (gamepane != null && gamepane.getChildren().contains(enemy)) {
+                                gamepane.getChildren().remove(enemy);
+                                enemies.remove(enemy);
+                            }
+                        });
+                    } else {
+                        checkPlayerCollision(enemy);
+                    }
                 })
         );
         animation.setCycleCount(Animation.INDEFINITE);
@@ -224,8 +267,12 @@ public class GameManager {
     private void checkPlayerCollision(ImageView enemy) {
         if (player != null && enemy.getBoundsInParent().intersects(player.getBoundsInParent())) {
             handlePlayerHit();
-            gamepane.getChildren().remove(enemy);
-            enemies.remove(enemy);
+            Platform.runLater(() -> {
+                if (gamepane != null && gamepane.getChildren().contains(enemy)) {
+                    gamepane.getChildren().remove(enemy);
+                    enemies.remove(enemy);
+                }
+            });
         }
     }
 
@@ -237,7 +284,6 @@ public class GameManager {
         if (lives <= 0) {
             gameOver(gamepane);
         } else {
-
             Timeline blink = new Timeline(
                     new KeyFrame(Duration.ZERO, new KeyValue(player.opacityProperty(), 0.3)),
                     new KeyFrame(Duration.seconds(0.1), new KeyValue(player.opacityProperty(), 1.0))
@@ -303,18 +349,9 @@ public class GameManager {
             lives = 3;
 
             // Transition fluide
-            // Transition fluide
             FadeTransition fadeOut = new FadeTransition(Duration.millis(300), gameOverBox);
             fadeOut.setFromValue(1.0);
             fadeOut.setToValue(0.0);
-            fadeOut.setOnFinished(event -> {
-                setupMainMenu();
-            });
-            fadeOut.play();
-
-            // Assemblage des éléments
-            gameOverBox.getChildren().addAll(title, scoreLabel, restartBtn, menuBtn);
-            gameOverBox.setOpacity(0);
             fadeOut.setOnFinished(event -> {
                 setupMainMenu();
             });
@@ -346,37 +383,6 @@ public class GameManager {
         activeAnimations.add(entrance);
     }
 
-    private void fireLaser() {
-        Rectangle laser = new Rectangle(5, 20, Color.RED);
-        laser.setX(player.getX() + player.getFitWidth() / 2 - 2.5);
-        laser.setY(player.getY());
-        gamepane.getChildren().add(laser);
-
-        // Animation du laser
-        Timeline animation = new Timeline(
-                new KeyFrame(Duration.millis(16), e -> {
-                    laser.setY(laser.getY() - 10);
-                    checkLaserCollisions(gamepane, laser);
-
-                    // Vérifier les collisions
-                    enemies.removeIf(enemy -> {
-                        if (laser.getBoundsInParent().intersects(enemy.getBoundsInParent())) {
-                            gamepane.getChildren().removeAll(laser, enemy);
-                            return true;
-                        }
-                        return false;
-                    });
-
-                    if (laser.getY() < 0) {
-                        gamepane.getChildren().remove(laser);
-                        ((Timeline) e.getSource()).stop();
-                    }
-                })
-        );
-        animation.setCycleCount(Animation.INDEFINITE);
-        animation.play();
-    }
-
     public void checkLaserCollisions(Pane gamePane, Rectangle laser) {
         enemies.removeIf(enemy -> {
             if (laser.getBoundsInParent().intersects(enemy.getBoundsInParent())) {
@@ -387,9 +393,9 @@ public class GameManager {
 
                     // Mettre à jour le score
                     score += 10;
-                    scoreLabel.setText("SCORE: " + score); // Mise à jour directe du label
-
-
+                    if (scoreLabel != null) {
+                        scoreLabel.setText("SCORE: " + score);
+                    }
                 });
                 return true;
             }
@@ -398,27 +404,23 @@ public class GameManager {
     }
 
     public void updateGameState() {
-        Enemy enemy = new Enemy();
-        enemy.updateEnemies();
-        HUD hud = new HUD();
-        hud.updateHUD();
         try {
-            // Code qui pourrait causer un problème
+            Enemy enemy = new Enemy();
+            enemy.updateEnemies();
+            HUD hud = new HUD();
+            hud.updateHUD();
         } catch (Exception e) {
-            System.err.println("Erreur détectée: " + e.getMessage());
-            e.printStackTrace();
-            // Continuer le jeu au lieu de planter
+            System.err.println("Erreur dans updateGameState: " + e.getMessage());
         }
     }
 
     private void stopAllAnimations() {
-        // Arrête toutes les animations et vide la liste
         for (Animation animation : activeAnimations) {
             if (animation != null) {
                 animation.stop();
             }
         }
-        activeAnimations.clear();  // Nettoie la liste après l'arrêt
+        activeAnimations.clear();
     }
 
     public void stopGame() {
@@ -438,34 +440,8 @@ public class GameManager {
         });
     }
 
-
-    public void initializeGame() {
-        gamepane = new Pane();
-        Player Player = new Player();
-        HUD hud = new HUD();
-        setupGameBackground();
-
-        player = Player.createPlayer();
-        gamepane.getChildren().add(player);
-        // Vérification de position
-        System.out.println("Position joueur - X: " + player.getX() + " Y: " + player.getY());
-
-        hud.setupHUD();
-        setupControls();
-        primaryStage.setScene(new Scene(gamepane, WINDOW_WIDTH, WINDOW_HEIGHT));
-        gamepane.getChildren().add(player);
-    }
-
-    public void setupGameBackground() {
-        design design = new design();
-        ImageView background = design.loadBestBackground();
-        gamepane.getChildren().add(background);
-        design.animateBackground(background);
-    }
-
     private void createExplosion(double x, double y) {
         Circle explosion = new Circle(x, y, 0, Color.ORANGERED);
-        Glow glow = new Glow(0.8);
         explosion.setEffect(new Glow(0.8));
         gamepane.getChildren().add(explosion);
 
@@ -479,32 +455,23 @@ public class GameManager {
     }
 
     public void startGameThreads() {
-        // Thread de mise à jour du jeu
+        // S'assurer que l'exécuteur n'est pas déjà fermé
+        if (gameExecutor.isShutdown()) {
+            gameExecutor = Executors.newFixedThreadPool(3);
+        }
 
+        // Thread de mise à jour du jeu
         gameExecutor.submit(() -> {
             while (gameRunning) {
-                Platform.runLater(this::updateGameState);
                 try {
+                    Platform.runLater(this::updateGameState);
                     Thread.sleep(16);
                 } catch (InterruptedException e) {
                     break;
-                }
-            }
-        });
-
-        // Thread d'apparition des ennemis
-        gameExecutor.submit(() -> {
-
-            while (gameRunning) {
-                Enemy enemy = new Enemy();
-                Platform.runLater(() -> enemy.createEnemyAirplane());
-                try {
-                    Thread.sleep(2000);
-                } catch (InterruptedException e) {
-                    break;
+                } catch (Exception e) {
+                    System.err.println("Erreur dans le thread de mise à jour: " + e.getMessage());
                 }
             }
         });
     }
 }
-
