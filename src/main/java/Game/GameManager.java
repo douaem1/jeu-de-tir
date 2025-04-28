@@ -75,6 +75,7 @@ public class GameManager {
     public Socket socket;
     public PrintWriter out;
     public TextArea chatArea;
+    public String selectedAircraft;
 
     public GameManager() {
         this.primaryStage = primaryStage;
@@ -129,7 +130,9 @@ public class GameManager {
 
     // In GameManager.java, modify the startGame method:
 // Dans le GameManager, remplacez la méthode startGame() comme ceci:
-    public void startGame() {
+    public void startGame(String selectedAircraft) {
+        this.selectedAircraft = selectedAircraft;
+
         Platform.runLater(() -> {
             try {
                 // Réinitialiser l'état du jeu
@@ -186,7 +189,7 @@ public class GameManager {
         gamepane.requestFocus();
 
         // Création d'une instance de Player unique pour gérer les tirs
-        Player playerInstance = new Player(this);  // Passer THIS comme référence
+        Player playerClass = new Player(this);  // Passer THIS comme référence
 
         gamepane.setOnKeyPressed(e -> {
             if (!gameRunning) return;
@@ -207,8 +210,8 @@ public class GameManager {
                     break;
                 case SPACE:
                     System.out.println("Space key pressed - firing laser");
-                    // Appelle la méthode de tir sans le hud (qui n'est pas nécessaire)
-                    playerInstance.fireEnhancedLaser(gamepane, player);
+                    // Use the playerClass instance instead of creating a null one
+                    playerClass.fireEnhancedLaser(gamepane, player);
                     break;
                 case ESCAPE:
                     stopGame();
@@ -332,7 +335,8 @@ public class GameManager {
             fadeOut.setFromValue(1.0);
             fadeOut.setToValue(0.0);
             fadeOut.setOnFinished(event -> {
-                startGame();
+
+                startGame(selectedAircraft);
             });
             fadeOut.play();
         });
@@ -447,8 +451,8 @@ public class GameManager {
 
         Timeline timeline = new Timeline(
                 new KeyFrame(Duration.ZERO, new KeyValue(explosion.radiusProperty(), 0)),
-                new KeyFrame(Duration.millis(200), new KeyValue(explosion.radiusProperty(), 30)),
-                new KeyFrame(Duration.millis(400), new KeyValue(explosion.opacityProperty(), 0))
+                new KeyFrame(Duration.millis(500), new KeyValue(explosion.radiusProperty(), 30)),
+                new KeyFrame(Duration.millis(500), new KeyValue(explosion.opacityProperty(), 0))
         );
         timeline.setOnFinished(e -> gamepane.getChildren().remove(explosion));
         timeline.play();

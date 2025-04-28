@@ -14,7 +14,6 @@ import javafx.scene.effect.DropShadow;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
-import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
@@ -140,7 +139,8 @@ public class MenuManager {
                     // S'assurer que nous avons un nouveau GameManager
                     gamemanager = new GameManager();
                     gamemanager.setPrimaryStage(primaryStage);
-                    gamemanager.startGame();
+                    String selectedAircraft = "f";
+                    gamemanager.startGame(selectedAircraft);
                 });
             } catch (Exception ex) {
                 System.err.println("Erreur lors du démarrage du jeu: " + ex.getMessage());

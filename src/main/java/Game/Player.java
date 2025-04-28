@@ -12,12 +12,17 @@ import javafx.util.Duration;
 public class Player {
     // Référence directe au GameManager parent
     private GameManager gameManager;
+    private String selectedAircraft;
 
     // Constantes
     private final double LASER_SPEED = 10.0;
 
     public Player(GameManager gameManager) {
         this.gameManager = gameManager;
+        // Get the selected aircraft from the GameManager
+        if (gameManager != null) {
+            this.selectedAircraft = gameManager.selectedAircraft;
+        }
     }
 
     public void fireEnhancedLaser(Pane gamePane, ImageView player) {
@@ -71,17 +76,12 @@ public class Player {
 
     public ImageView createPlayer() {
         try {
-            // Chargement de l'image
-            Image image = new Image(getClass().getResourceAsStream("/airplane.png"));
+            String aircraftImagePath = getAircraftImagePath(selectedAircraft);
+            Image image = new Image(getClass().getResourceAsStream(aircraftImagePath));
 
-            // Création du ImageView
             ImageView player = new ImageView(image);
-
-            // Configuration de la taille
             player.setFitWidth(100);
             player.setPreserveRatio(true);
-
-            // Positionnement initial
             player.setX(GameManager.WINDOW_WIDTH / 2 - 50);
             player.setY(GameManager.WINDOW_HEIGHT - 150);
 
@@ -89,20 +89,36 @@ public class Player {
 
         } catch (Exception e) {
             System.err.println("Erreur chargement joueur: " + e.getMessage());
-            e.printStackTrace();
-
-            // Fallback si l'image ne charge pas
-            Rectangle placeholder = new Rectangle(100, 60, Color.BLUE);
-            placeholder.setStroke(Color.WHITE);
-
+            // Fallback to a simple shape if image loading fails
+            Rectangle fallbackPlayer = new Rectangle(100, 80, Color.BLUE);
+            fallbackPlayer.setX(GameManager.WINDOW_WIDTH / 2 - 50);
+            fallbackPlayer.setY(GameManager.WINDOW_HEIGHT - 150);
+            ImageView fallbackView = new ImageView();
+            // Convert rectangle to image
             SnapshotParameters params = new SnapshotParameters();
             params.setFill(Color.TRANSPARENT);
+            Image fallbackImage = fallbackPlayer.snapshot(params, null);
+            fallbackView.setImage(fallbackImage);
+            return fallbackView;
+        }
+    }
 
-            ImageView fallback = new ImageView(placeholder.snapshot(params, null));
-            fallback.setX(GameManager.WINDOW_WIDTH / 2 - 50);
-            fallback.setY(GameManager.WINDOW_HEIGHT - 150);
+    private String getAircraftImagePath(String aircraftName) {
+        if (aircraftName == null) {
+            System.out.println("Warning: No aircraft selected, using default");
+            return "/airplane.png"; // Default aircraft
+        }
 
-            return fallback;
+        switch (aircraftName) {
+            case "F-22 Raptor":
+                return "/avion1.png";
+            case "Eurofighter Typhoon":
+                return "/avion2.png";
+            case "Sukhoi Su-57":
+                return "/airplane.png";
+            default:
+                System.out.println("Unknown aircraft: " + aircraftName + ", using default");
+                return "/airplane.png";  // Option par défaut
         }
     }
 }
