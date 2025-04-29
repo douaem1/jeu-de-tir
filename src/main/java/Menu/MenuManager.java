@@ -113,39 +113,26 @@ public class MenuManager {
         signInBtn.setMaxWidth(Double.MAX_VALUE);
         quitBtn.setMaxWidth(Double.MAX_VALUE);
 
-        // Utiliser une approche directe pour "START AS A GUEST"
+        // Corrected implementation for "START AS A GUEST"
         startBtn.setOnAction(e -> {
             System.out.println("Bouton START AS A GUEST cliqué");
             try {
                 // Animation de bouton
                 animation.playButtonPressAnimation(startBtn);
 
-                // Créer d'abord un écran de chargement simple
-                StackPane loadingPane = new StackPane();
-                loadingPane.setStyle("-fx-background-color: black;");
+                // Create and show the player selection interface
+                PlayerSelectionInterface selectionInterface = new PlayerSelectionInterface(primaryStage);
 
-                Label loadingLabel = new Label("CHARGEMENT...");
-                loadingLabel.setFont(Font.font(gamemanager.FONT_FAMILIES[0], FontWeight.BOLD, 36));
-                loadingLabel.setTextFill(Color.WHITE);
+                // We need to pass the GameManager to the selection interface
+                // so that when aircraft is selected, it can properly start the game
+                selectionInterface.setGameManager(gamemanager);
 
-                loadingPane.getChildren().add(loadingLabel);
-
-                // Appliquer l'écran de chargement
-                Scene loadingScene = new Scene(loadingPane, GameManager.WINDOW_WIDTH, GameManager.WINDOW_HEIGHT);
-                primaryStage.setScene(loadingScene);
-
-                // Lancer le jeu après un court délai pour s'assurer que l'écran de chargement s'affiche
-                Platform.runLater(() -> {
-                    // S'assurer que nous avons un nouveau GameManager
-                    gamemanager = new GameManager();
-                    gamemanager.setPrimaryStage(primaryStage);
-                    String selectedAircraft = "f";
-                    gamemanager.startGame(selectedAircraft);
-                });
+                // Show the selection interface - this will let the player choose aircraft and difficulty
+                selectionInterface.showSelectionInterface();
             } catch (Exception ex) {
-                System.err.println("Erreur lors du démarrage du jeu: " + ex.getMessage());
+                System.err.println("Erreur lors de l'affichage de l'interface de sélection: " + ex.getMessage());
                 ex.printStackTrace();
-                showNotification("Erreur de chargement du jeu");
+                showNotification("Erreur de chargement de l'interface");
             }
         });
 
