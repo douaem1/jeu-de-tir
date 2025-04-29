@@ -70,6 +70,7 @@ public class users {
         List<users> ListUsers = new ArrayList<users>();
         try {
             Statement stm = ConnexionDB.seConnecter();
+
             ResultSet rs = stm.executeQuery("select * from users");
             while (rs.next()) {
                 String username = rs.getString(1);

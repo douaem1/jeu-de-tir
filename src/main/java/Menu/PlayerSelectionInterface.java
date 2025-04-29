@@ -91,17 +91,21 @@ public class PlayerSelectionInterface {
         mainContainer.setAlignment(Pos.TOP_CENTER);
         mainContainer.setPadding(new Insets(40));
         mainContainer.setMaxWidth(1000);
-
-        // Title
+        //Titre
+        Label title1 = new Label("WELCOME !");
         Label title = new Label("CHOOSE YOUR FIGHTER");
         title.setFont(Font.font(FONT_FAMILIES[0], FontWeight.EXTRA_BOLD, 54));
+        title1.setFont(Font.font(FONT_FAMILIES[0], FontWeight.EXTRA_BOLD, 54));
         title.setTextFill(COLORS.get("LIGHT"));
+        title1.setTextFill(COLORS.get("LIGHT"));
 
         DropShadow glow = new DropShadow(15, COLORS.get("PRIMARY"));
         glow.setSpread(0.3);
         Bloom bloom = new Bloom(0.3);
         title.setEffect(new Blend(BlendMode.SCREEN, bloom, glow));
+        title1.setEffect(new Blend(BlendMode.SCREEN, bloom, glow));
         animation.animateTextGlow(title, glow);
+        animation.animateTextGlow(title1, glow);
 
         // Aircraft selection
         HBox aircraftContainer = createAircraftSelection();
@@ -140,7 +144,7 @@ public class PlayerSelectionInterface {
         selectedDifficultyProperty.addListener((obs, oldVal, newVal) -> updateStartButton.run());
 
         // Build the main container
-        mainContainer.getChildren().addAll(title, aircraftContainer, difficultyContainer, startGameBtn, returnBtn);
+        mainContainer.getChildren().addAll(title1,title, aircraftContainer, difficultyContainer, startGameBtn, returnBtn);
 
         root.getChildren().add(mainContainer);
 
