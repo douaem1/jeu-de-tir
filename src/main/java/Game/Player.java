@@ -9,9 +9,10 @@ import javafx.scene.paint.*;
 import javafx.scene.shape.*;
 import javafx.util.Duration;
 
+
 public class Player {
     // Référence directe au GameManager parent
-    private GameManager gameManager;
+    public  GameManager gameManager;
     private String selectedAircraft;
 
     // Constantes

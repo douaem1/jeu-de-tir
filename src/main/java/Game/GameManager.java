@@ -1,16 +1,12 @@
 package Game;
 
-import chat_Client_Serveur.GameState;
 import javafx.animation.*;
 import javafx.application.Platform;
 import javafx.geometry.*;
 import javafx.scene.*;
-import javafx.scene.canvas.Canvas;
-import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.*;
 import javafx.scene.effect.*;
 import javafx.scene.image.*;
-import javafx.scene.input.KeyCode;
 import javafx.scene.layout.*;
 import javafx.scene.paint.*;
 import javafx.scene.shape.*;
@@ -21,47 +17,31 @@ import java.io.*;
 import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.function.BiConsumer;
-
 import design.design;
 import design.*;
 import Menu.MenuManager;
 import Menu.Authentification;
 
 public class GameManager {
-    //public static final double PLAYER_WIDTH = ;
     public Stage primaryStage;
+;
+    public  selelectedAircraft;
+    public String selectedAircraft;
     private MenuManager menuManager;
     private Authentification auth;
-    private Canvas gameCanvas;
-    private GraphicsContext gc;
-    private Group gameRoot;
-    private Scene gameScene;
-    private StackPane mainLayout;
+    private boolean isInvincible = false;
 
-    // Pour stocker les images des avions
-    Map<String, Image> aircraftImages = new HashMap<>();
+    public int scoreMultiplier = 1;
+    public int currentLevel = 1;
+    private final int[] LEVEL_SCORE_THRESHOLDS = {60, 100, 160, 220, 290, 350}; // Scores pour débloquer les niveaux
+    public double enemySpeed = 0.5; // Vitesse de base
+    public double enemySpeedMultiplier = 1.0; // Nouvelle variable
+    public int enemiesPerWave = 1;  // Nombre d'ennemis par vague
 
-    // Pour stocker les positions des autres joueurs
-    private Map<String, GameState.Position> otherPlayers = new HashMap<>();
-
-    // L'utilisateur courant
-    private String currentPlayer;
-    private GameState.Position currentPlayerPosition;
-    private String currentUsername;
-    String selectedAircraft;
 
     // Configuration
     public static final int WINDOW_WIDTH = 1200;
     public static final int WINDOW_HEIGHT = 800;
-    private static final int GAME_WIDTH = 800;
-    private static final int GAME_HEIGHT = 600;
-    public static final int PLAYER_WIDTH = 50;
-    public  static final int PLAYER_HEIGHT = 50;
-    public static final double PLAYER_SPEED = 5.0;
-    public static final double LASER_SPEED = 10.0;
-
-
     public String[] BACKGROUND_PATHS = {"/img.jpg", "/background.jpg", "/backround.jpg"};
     public String[] FONT_FAMILIES = {"Agency FB", "Arial", "Bank Gothic"};
     public Map<String, Color> COLORS = Map.of(
@@ -75,29 +55,31 @@ public class GameManager {
 
     // Éléments du jeu
     public ImageView player;
-    public static Pane gamepane;  // Conteneur principal du jeu
     public CopyOnWriteArrayList<ImageView> enemies = new CopyOnWriteArrayList<>();
     public CopyOnWriteArrayList<Animation> activeAnimations = new CopyOnWriteArrayList<>();
     public int score = 0;
     public int lives = 3;
+    public static Pane gamepane;  // Conteneur principal du jeu
 
     // Éléments du HUD
-    public HUD hud;
+    public BorderPane hudContainer;
     public Label scoreLabel;
     public Label levelLabel;
+    public ProgressBar healthBar;
     public Label healthLabel;
     public Label ammoLabel;
     public Label notificationLabel;
-    public ProgressBar healthBar;
-    public BorderPane hudContainer;
 
     // Variables de contrôle du mouvement
-    private Map<String, GameState.Position> playerPositions = new HashMap<>();
-    private Map<String, String> playerAircrafts = new HashMap<>();
-    private Set<KeyCode> keysPressed = new HashSet<>();
-    private BiConsumer<Integer, Integer> positionChangeListener;
+    public volatile boolean movingLeft = false;
+    public volatile boolean movingRight = false;
+    public volatile boolean movingUp = false;
+    public volatile boolean movingDown = false;
+    public volatile boolean firing = false;
+    public final double PLAYER_SPEED = 5.0;
+    public final double LASER_SPEED = 10.0;
 
-    // Thread et état du jeu
+    // Threads
     public ExecutorService gameExecutor = Executors.newFixedThreadPool(3);
     public volatile boolean gameRunning = false;
 
@@ -105,17 +87,16 @@ public class GameManager {
     public Socket socket;
     public PrintWriter out;
     public TextArea chatArea;
-    private Map<String, ImageView> playerViews = new HashMap<>(); // Pour stocker les vues des joueurs
-    private Map<String, String> playerAircraftTypes = new HashMap<>(); // Pour stocker les types d'avions des joueurs
-    private Set<String> connectedPlayers = new HashSet<>();
 
-
+    public GameManager() {
+        this.primaryStage = primaryStage;
+    }
 
     public void setPrimaryStage(Stage primaryStage) {
         this.primaryStage = primaryStage;
     }
 
-    public void setupMainMenu() {
+    public  void setupMainMenu() {
         try {
             // Création d'un nouveau root
             StackPane root = new StackPane();
@@ -150,51 +131,46 @@ public class GameManager {
             e.printStackTrace();
         }
     }
+    public HUD hud;
 
     public void setupHUD() {
-        if (hud == null) {
-            hud = new HUD();
-        }
+        hud = new HUD();
         hud.setupHUD();
-
-        // S'assurer que le scoreLabel est correctement référencé
-        scoreLabel = hud.scoreLabel;
-
-        if (gamepane != null) {
-            gamepane.getChildren().add(hud.hudContainer);
-        }
+        gamepane.getChildren().add(hud.hudContainer);
     }
 
-    public void startGame(String selectedAircraft) {
-        this.selectedAircraft = selectedAircraft;
-
+    // In GameManager.java, modify the startGame method:
+// Dans le GameManager, remplacez la méthode startGame() comme ceci:
+    public void startGame(Object selelectedAircraft) {
         Platform.runLater(() -> {
             try {
                 // Réinitialiser l'état du jeu
                 gamepane = new Pane();
                 gameRunning = true;
                 enemies.clear();
-                playerViews.clear();
                 activeAnimations.forEach(Animation::stop);
                 activeAnimations.clear();
                 score = 0;
                 lives = 3;
 
                 // Setup de base
-                design designHelper = new design();
-                ImageView background = designHelper.loadBestBackground();
+                ImageView background = new design().loadBestBackground();
                 gamepane.getChildren().add(background);
 
-                // Créer le joueur principal
+                // Créer le joueur
                 Player playerClass = new Player(this);
                 player = playerClass.createPlayer();
                 gamepane.getChildren().add(player);
 
-                // Ajouter le joueur à la liste des vues
-                playerViews.put(currentUsername, player);
+                // IMPORTANT: Initialiser le HUD avec une référence à ce GameManager
+                hud = new HUD(this);
+                hud.setupHUD();
 
-                // Initialiser le HUD
-                setupHUD();
+                // S'assurer que la référence au scoreLabel est disponible
+                scoreLabel = hud.scoreLabel;
+
+                // Ajouter le HUD à la scène
+                gamepane.getChildren().add(hud.hudContainer);
 
                 // Setup des contrôles
                 setupControls();
@@ -208,12 +184,6 @@ public class GameManager {
                 setupEnemySpawning();
                 startGameThreads();
 
-                // Si en mode multijoueur, informer les autres de notre présence
-                if (isMultiplayerMode && out != null) {
-                    out.println("PLAYER_JOIN:" + currentUsername + "," + selectedAircraft);
-                    out.flush();
-                }
-
                 System.out.println("Game started successfully");
             } catch (Exception e) {
                 e.printStackTrace();
@@ -222,78 +192,83 @@ public class GameManager {
             }
         });
     }
-
-    // Méthode à appeler lorsque le joueur se déconnecte
-    public void disconnectFromMultiplayerGame() {
-        if (isMultiplayerMode && out != null) {
-            out.println("PLAYER_LEAVE:" + currentUsername);
-            out.flush();
-            isMultiplayerMode = false;
-        }
-    }
-
+    // Et remplacez la méthode setupControls() comme ceci:
     public void setupControls() {
-        if (gamepane == null) return;
-
         gamepane.setFocusTraversable(true);
         gamepane.requestFocus();
 
         // Création d'une instance de Player unique pour gérer les tirs
-        Player playerClass = new Player(this);
+        Player playerInstance = new Player(this);  // Passer THIS comme référence
 
         gamepane.setOnKeyPressed(e -> {
             if (!gameRunning) return;
 
-            keysPressed.add(e.getCode());
             double speed = 8;
-            boolean positionChanged = false;
-
             switch (e.getCode()) {
                 case LEFT:
                     player.setX(Math.max(0, player.getX() - speed));
-                    positionChanged = true;
                     break;
                 case RIGHT:
                     player.setX(Math.min(WINDOW_WIDTH - player.getFitWidth(), player.getX() + speed));
-                    positionChanged = true;
                     break;
                 case UP:
                     player.setY(Math.max(0, player.getY() - speed));
-                    positionChanged = true;
                     break;
                 case DOWN:
                     player.setY(Math.min(WINDOW_HEIGHT - player.getFitHeight(), player.getY() + speed));
-                    positionChanged = true;
                     break;
                 case SPACE:
                     System.out.println("Space key pressed - firing laser");
-                    playerClass.fireEnhancedLaser(gamepane, player);
-
-                    // Envoyer l'événement de tir aux autres clients
-                    if (out != null && isMultiplayerMode) {
-                        out.println("PLAYER_FIRE:" + currentUsername + "," + player.getX() + "," + player.getY());
-                        out.flush();
-                    }
+                    // Appelle la méthode de tir sans le hud (qui n'est pas nécessaire)
+                    playerInstance.fireEnhancedLaser(gamepane, player);
                     break;
                 case ESCAPE:
                     stopGame();
                     setupMainMenu();
                     break;
             }
-
-            // Envoyer la mise à jour de position si nécessaire
-            if (positionChanged && out != null && isMultiplayerMode) {
-                out.println("PLAYER_POS:" + currentUsername + "," + player.getX() + "," + player.getY());
-                out.flush();
-            }
-        });
-
-        gamepane.setOnKeyReleased(e -> {
-            keysPressed.remove(e.getCode());
         });
     }
+    public void slowEnemiesTemporarily(int seconds) {
+        enemySpeedMultiplier = 0.3; // Réduit la vitesse à 30%
 
-    public void setupEnemySpawning() {
+        // ▼▼▼ Animation visuelle du ralentissement ▼▼▼
+        Label effectLabel = new Label("ENNEMIS RALENTIS!");
+        effectLabel.setStyle("-fx-font-size: 24; -fx-text-fill: white; -fx-effect: dropshadow(three-pass-box, blue, 10, 0.5, 0, 0);");
+        effectLabel.setLayoutX(WINDOW_WIDTH / 2 - 100);
+        effectLabel.setLayoutY(100);
+        gamepane.getChildren().add(effectLabel);
+
+        FadeTransition fade = new FadeTransition(Duration.seconds(2), effectLabel);
+        fade.setFromValue(1.0);
+        fade.setToValue(0.0);
+        fade.setOnFinished(e -> gamepane.getChildren().remove(effectLabel));
+        fade.play();
+
+        // ▼▼▼ Réinitialisation après 'seconds' secondes ▼▼▼
+        Timeline slowTimer = new Timeline(
+                new KeyFrame(Duration.seconds(seconds), e -> {
+                    enemySpeedMultiplier = 1.0; // Rétablir la vitesse normale
+
+                    Label endLabel = new Label("LES ENNEMIS REPRENNENT LEUR VITESSE!");
+                    endLabel.setStyle("-fx-font-size: 16; -fx-text-fill: white; -fx-effect: dropshadow(three-pass-box, red, 5, 0.5, 0, 0);");
+                    endLabel.setLayoutX(WINDOW_WIDTH / 2 - 150);
+                    endLabel.setLayoutY(100);
+                    gamepane.getChildren().add(endLabel);
+
+                    FadeTransition fadeOut = new FadeTransition(Duration.seconds(2), endLabel);
+                    fadeOut.setFromValue(1.0);
+                    fadeOut.setToValue(0.0);
+                    fadeOut.setOnFinished(ev -> gamepane.getChildren().remove(endLabel));
+                    fadeOut.play();
+                })
+        );
+        slowTimer.play();
+        activeAnimations.add(slowTimer);
+    }
+// Also modify the setupEnemySpawning method to add CSS class to enemies:
+
+    private void setupEnemySpawning() {
         Timeline enemySpawner = new Timeline(
                 new KeyFrame(Duration.seconds(2), event -> {
                     if (!gameRunning) return;
@@ -314,7 +289,28 @@ public class GameManager {
         enemySpawner.play();
         activeAnimations.add(enemySpawner);
     }
+    public void animateEnemy(ImageView enemy) {
+        Timeline animation = new Timeline(
+                new KeyFrame(Duration.millis(8), e -> {
+                    if (!gameRunning) return;
 
+                    enemy.setY(enemy.getY() + 0.5);
+                    if (enemy.getY() > WINDOW_HEIGHT) {
+                        Platform.runLater(() -> {
+                            if (gamepane != null && gamepane.getChildren().contains(enemy)) {
+                                gamepane.getChildren().remove(enemy);
+                                enemies.remove(enemy);
+                            }
+                        });
+                    } else {
+                        checkPlayerCollision(enemy);
+                    }
+                })
+        );
+        animation.setCycleCount(Animation.INDEFINITE);
+        animation.play();
+        activeAnimations.add(animation);
+    }
 
     private void checkPlayerCollision(ImageView enemy) {
         if (player != null && enemy.getBoundsInParent().intersects(player.getBoundsInParent())) {
@@ -328,12 +324,10 @@ public class GameManager {
         }
     }
 
-    private void handlePlayerHit() {
+    void handlePlayerHit() {
         lives--;
-
-        if (hud != null) {
-            hud.updateHUD();
-        }
+        HUD hud = new HUD();
+        hud.updateHUD();
 
         if (lives <= 0) {
             gameOver(gamepane);
@@ -344,147 +338,8 @@ public class GameManager {
             );
             blink.setCycleCount(6);
             blink.play();
-            updateMultiplayerHUD();
-
-            // Vérifier si partie terminée
-            checkGameEndMultiplayer();
         }
     }
-    // 1. Ajoutez ces variables pour suivre les vies de chaque joueur
-    private int player1Lives = 3;
-    private int player2Lives = 3;
-    private boolean isMultiplayerMode = false;
-
-    // 2. Méthode modifiée pour vérifier les collisions entre les ennemis et les deux joueurs
-     private void checkGameEndMultiplayer() {
-        // En mode multijoueur, la partie continue tant qu'au moins un joueur est en vie
-        if (player1Lives <= 0 && player2Lives <= 0) {
-            gameOver(gamepane);
-        } else if (player1Lives <= 0) {
-            // Joueur 1 est éliminé
-            removePlayer("player-player1");
-            showNotification("Joueur 1 éliminé! Joueur 2 continue seul.", 2000);
-        } else if (player2Lives <= 0) {
-            // Joueur 2 est éliminé
-            removePlayer("player-player2");
-            showNotification("Joueur 2 éliminé! Joueur 1 continue seul.", 2000);
-        }
-    }
-
-    // 5. Méthode pour supprimer un joueur de l'écran
-    private void removePlayer(String playerId) {
-        for (Node node : gamepane.getChildren()) {
-            if (node instanceof ImageView && node.getId() != null &&
-                    node.getId().equals(playerId)) {
-                // Animation de disparition
-                FadeTransition fade = new FadeTransition(Duration.millis(500), node);
-                fade.setFromValue(1.0);
-                fade.setToValue(0.0);
-                fade.setOnFinished(e -> gamepane.getChildren().remove(node));
-                fade.play();
-                break;
-            }
-        }
-    }
-    private void handlePlayer1Hit() {
-        player1Lives--;
-
-        // Effet visuel de clignotement
-        ImageView player1View = null;
-        for (Node node : gamepane.getChildren()) {
-            if (node instanceof ImageView && node.getId() != null &&
-                    node.getId().equals("player-player1")) {
-                player1View = (ImageView) node;
-                break;
-            }
-        }
-
-        if (player1View != null) {
-            Timeline blink = new Timeline(
-                    new KeyFrame(Duration.ZERO, new KeyValue(player1View.opacityProperty(), 0.3)),
-                    new KeyFrame(Duration.seconds(0.1), new KeyValue(player1View.opacityProperty(), 1.0))
-            );
-            blink.setCycleCount(6);
-            blink.play();
-        }
-
-        // Mise à jour du HUD
-        updateMultiplayerHUD();
-
-        // Vérifier si partie terminée
-        checkGameEndMultiplayer();
-    }
-
-    private void handlePlayer2Hit() {
-        player2Lives--;
-
-        // Effet visuel de clignotement
-        ImageView player2View = null;
-        for (Node node : gamepane.getChildren()) {
-            if (node instanceof ImageView && node.getId() != null &&
-                    node.getId().equals("player-player2")) {
-                player2View = (ImageView) node;
-                break;
-            }
-        }
-
-        if (player2View != null) {
-            Timeline blink = new Timeline(
-                    new KeyFrame(Duration.ZERO, new KeyValue(player2View.opacityProperty(), 0.3)),
-                    new KeyFrame(Duration.seconds(0.1), new KeyValue(player2View.opacityProperty(), 1.0))
-            );
-            blink.setCycleCount(6);
-            blink.play();
-        }
-
-        // Mise à jour du HUD
-        updateMultiplayerHUD();
-
-        // Vérifier si partie terminée
-        checkGameEndMultiplayer();
-    }
-
-
-    // 6. Mise à jour du HUD pour le mode multijoueur
-    private void updateMultiplayerHUD() {
-        // Mettre à jour l'affichage des vies pour les deux joueurs
-        for (Node node : gamepane.getChildren()) {
-            if (node instanceof VBox) {
-                VBox vbox = (VBox) node;
-                if (vbox.getChildren().size() > 0 && vbox.getChildren().get(0) instanceof Label) {
-                    Label firstLabel = (Label) vbox.getChildren().get(0);
-                    if (firstLabel.getText().equals("SCORES")) {
-                        // Ajouter ou mettre à jour les indicateurs de vie
-                        boolean hasLivesIndicator = false;
-                        for (int i = 0; i < vbox.getChildren().size(); i++) {
-                            if (vbox.getChildren().get(i) instanceof Label &&
-                                    ((Label)vbox.getChildren().get(i)).getText().startsWith("VIES:")) {
-                                hasLivesIndicator = true;
-
-                                // Mise à jour des indicateurs de vie
-                                Label player1Lives = (Label) vbox.getChildren().get(i);
-                                player1Lives.setText("VIES: J1: " + this.player1Lives + " | J2: " + this.player2Lives);
-
-                                break;
-                            }
-                        }
-
-                        // Si pas encore d'indicateur de vies, en créer un
-                        if (!hasLivesIndicator) {
-                            Label livesLabel = new Label("VIES: J1: " + player1Lives + " | J2: " + player2Lives);
-                            livesLabel.setTextFill(Color.WHITE);
-                            livesLabel.setStyle("-fx-font-weight: bold;");
-                            vbox.getChildren().add(livesLabel);
-                        }
-
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-
 
     private void gameOver(Pane gamePane) {
         gameRunning = false;
@@ -525,7 +380,8 @@ public class GameManager {
             fadeOut.setFromValue(1.0);
             fadeOut.setToValue(0.0);
             fadeOut.setOnFinished(event -> {
-                startGame(selectedAircraft);
+                GameManager gamemanager  = new GameManager();
+                startGame(gamemanager.selelectedAircraft);
             });
             fadeOut.play();
         });
@@ -600,10 +456,8 @@ public class GameManager {
         try {
             Enemy enemy = new Enemy();
             enemy.updateEnemies();
-
-            if (hud != null) {
-                hud.updateHUD();
-            }
+            HUD hud = new HUD();
+            hud.updateHUD();
         } catch (Exception e) {
             System.err.println("Erreur dans updateGameState: " + e.getMessage());
         }
@@ -642,8 +496,8 @@ public class GameManager {
 
         Timeline timeline = new Timeline(
                 new KeyFrame(Duration.ZERO, new KeyValue(explosion.radiusProperty(), 0)),
-                new KeyFrame(Duration.millis(500), new KeyValue(explosion.radiusProperty(), 30)),
-                new KeyFrame(Duration.millis(500), new KeyValue(explosion.opacityProperty(), 0))
+                new KeyFrame(Duration.millis(200), new KeyValue(explosion.radiusProperty(), 30)),
+                new KeyFrame(Duration.millis(400), new KeyValue(explosion.opacityProperty(), 0))
         );
         timeline.setOnFinished(e -> gamepane.getChildren().remove(explosion));
         timeline.play();
@@ -669,649 +523,4 @@ public class GameManager {
             }
         });
     }
-
-       public void setCurrentUsername(String username) {
-        this.currentUsername = username;
-    }
-
-
-
-
-    // Trouver ou créer un sprite d'avion pour un joueur
-    // Mettre à jour le tableau des scores
-
-    // Méthode pour définir un écouteur d'événements de tir
-    private BiConsumer<Void, Void> fireEventListener;
-
-    public void setFireEventListener(Runnable listener) {
-        this.fireEventListener = (v1, v2) -> listener.run();
-    }
-
-    // Méthode utilitaire pour récupérer tous les avions ennemis
-    public List<ImageView> getEnemyShips() {
-        List<ImageView> enemyShips = new ArrayList<>();
-        for (Node node : gamepane.getChildren()) {
-            if (node instanceof ImageView &&
-                    node.getStyleClass().contains("enemy-ship")) {
-                enemyShips.add((ImageView)node);
-            }
-        }
-        return enemyShips;
-    }
-
-
-
-
-    private void setupGameLoop() {
-        new AnimationTimer() {
-            @Override
-            public void handle(long now) {
-                update();
-            }
-        }.start();
-    }
-
-    public void update() {
-        if (currentUsername != null && playerPositions.containsKey(currentUsername)) {
-            GameState.Position pos = playerPositions.get(currentUsername);
-            int moveSpeed = 5;
-            boolean moved = false;
-
-            // Mettre à jour la position du joueur selon les touches pressées
-            if (keysPressed.contains(KeyCode.UP) || keysPressed.contains(KeyCode.W)) {
-                pos.y -= moveSpeed;
-                moved = true;
-            }
-            if (keysPressed.contains(KeyCode.DOWN) || keysPressed.contains(KeyCode.S)) {
-                pos.y += moveSpeed;
-                moved = true;
-            }
-            if (keysPressed.contains(KeyCode.LEFT) || keysPressed.contains(KeyCode.A)) {
-                pos.x -= moveSpeed;
-                moved = true;
-            }
-            if (keysPressed.contains(KeyCode.RIGHT) || keysPressed.contains(KeyCode.D)) {
-                pos.x += moveSpeed;
-                moved = true;
-            }
-
-            // Garder le joueur dans les limites du canevas
-            pos.x = Math.max(0, Math.min(GAME_WIDTH - PLAYER_WIDTH, pos.x));
-            pos.y = Math.max(0, Math.min(GAME_HEIGHT - PLAYER_HEIGHT, pos.y));
-
-            // Si le joueur a bougé, notifier le serveur
-            if (moved && positionChangeListener != null) {
-                positionChangeListener.accept(pos.x, pos.y);
-            }
-        }
-    }
-
-private void showNotification(String message, int duration) {
-        if (gamepane == null) return;
-
-        Label notification = new Label(message);
-        notification.setStyle("-fx-background-color: rgba(0,0,0,0.7); -fx-text-fill: white; -fx-padding: 10px; -fx-background-radius: 5px;");
-        notification.setTranslateY(50);
-
-        // Centrer la notification
-        StackPane notificationContainer = new StackPane(notification);
-        notificationContainer.setAlignment(Pos.TOP_CENTER);
-        notificationContainer.setLayoutX(WINDOW_WIDTH / 2 - 150);
-        notificationContainer.prefWidth(300);
-
-        // Ajouter à la scène
-        gamepane.getChildren().add(notificationContainer);
-
-        // Animation de fondu
-        FadeTransition fadeIn = new FadeTransition(Duration.millis(300), notificationContainer);
-        fadeIn.setFromValue(0.0);
-        fadeIn.setToValue(1.0);
-        fadeIn.play();
-
-        // Temporisation pour la disparition
-        Timeline timeline = new Timeline(new KeyFrame(Duration.millis(duration), e -> {
-            FadeTransition fadeOut = new FadeTransition(Duration.millis(500), notificationContainer);
-            fadeOut.setFromValue(1.0);
-            fadeOut.setToValue(0.0);
-            fadeOut.setOnFinished(event -> gamepane.getChildren().remove(notificationContainer));
-            fadeOut.play();
-        }));
-        timeline.play();
-        activeAnimations.add(timeline);
-    }
-
-    /**
-     * Met à jour les données des joueurs reçues du serveur
-     */
-        private ImageView findOrCreatePlayerView(String username, String aircraftType) {
-        // Ne pas recréer notre propre joueur qui est déjà géré
-        if (username.equals(currentUsername) && player != null) {
-            return player;
-        }
-
-        // Chercher s'il existe déjà un avion pour ce joueur
-        for (Node node : gamepane.getChildren()) {
-            if (node instanceof ImageView && node.getId() != null &&
-                    node.getId().equals("player-" + username)) {
-                return (ImageView)node;
-            }
-        }
-
-        // Si non, créer un nouvel avion
-        ImageView playerView = new ImageView();
-
-        // Charger l'image correspondant au type d'avion
-        if (aircraftImages.containsKey(aircraftType)) {
-            playerView.setImage(aircraftImages.get(aircraftType));
-        } else {
-            // Image par défaut si le type n'existe pas
-            playerView.setImage(aircraftImages.get("default"));
-        }
-
-        // Définir l'ID pour pouvoir retrouver ce joueur plus tard
-        playerView.setId("player-" + username);
-
-        // Définir la taille
-        playerView.setFitWidth(PLAYER_WIDTH);
-        playerView.setFitHeight(PLAYER_HEIGHT);
-
-        // Ajouter des effets visuels pour distinguer les joueurs
-        ColorAdjust colorAdjust = new ColorAdjust();
-        colorAdjust.setHue(0.2); // Teinte rouge pour les autres joueurs
-        playerView.setEffect(colorAdjust);
-
-        // Ajouter un nom au-dessus de l'avion
-        Label nameLabel = new Label(username);
-        nameLabel.setStyle("-fx-background-color: rgba(0,0,0,0.5); -fx-text-fill: white; -fx-padding: 3px;");
-        nameLabel.setTranslateY(-20); // Positionner au-dessus de l'avion
-
-        // Créer un conteneur pour l'avion et son nom
-        StackPane playerContainer = new StackPane();
-        playerContainer.getChildren().addAll(playerView, nameLabel);
-        StackPane.setAlignment(nameLabel, Pos.TOP_CENTER);
-
-        // Ajouter au pane
-        gamepane.getChildren().add(playerView);
-
-        System.out.println("Nouveau joueur créé: " + username + " avec l'avion " + aircraftType);
-        return playerView;
-    }
-    /**
-     public void addEnemy(double x, double y, String type) {
-     Platform.runLater(() -> {
-     if (!gameRunning) return;
-
-     Enemy enemy = new Enemy();
-     ImageView enemyView = enemy.createEnemyAirplane();
-
-     if (enemyView != null) {
-     enemyView.setX(x);
-     enemyView.setY(y);
-     enemyView.getStyleClass().add("enemy-ship");
-     enemyView.setId("enemy-" + System.currentTimeMillis()); // ID unique pour cet ennemi
-
-     gamepane.getChildren().add(enemyView);
-     enemies.add(enemyView);
-     animateEnemy(enemyView);
-     }
-     });
-     }
-
-     /**
-     * Animation des ennemis avec synchronisation réseau
-     */
-    public void animateEnemy(ImageView enemy) {
-        Timeline animation = new Timeline(
-                new KeyFrame(Duration.millis(16), e -> {
-                    if (!gameRunning) return;
-
-                    enemy.setY(enemy.getY() + 0.5);
-                    if (enemy.getY() > WINDOW_HEIGHT) {
-                        Platform.runLater(() -> {
-                            if (gamepane != null && gamepane.getChildren().contains(enemy)) {
-                                gamepane.getChildren().remove(enemy);
-                                enemies.remove(enemy);
-                            }
-                        });
-                    } else {
-                        // Vérifier les collisions avec tous les joueurs
-                        checkAllPlayersCollision(enemy);
-                    }
-                })
-        );
-        animation.setCycleCount(Animation.INDEFINITE);
-        animation.play();
-        activeAnimations.add(animation);
-    }
-
-    /**
-     * Vérifie les collisions avec tous les joueurs sur l'écran
-     */
-    private void checkAllPlayersCollision(ImageView enemy) {
-        for (Node node : gamepane.getChildren()) {
-            if (node instanceof ImageView && node.getId() != null &&
-                    node.getId().startsWith("player-")) {
-                ImageView playerView = (ImageView) node;
-
-                if (enemy.getBoundsInParent().intersects(playerView.getBoundsInParent())) {
-                    // Si c'est notre joueur qui est touché
-                    if (playerView.getId().equals("player-" + currentUsername)) {
-                        handlePlayerHit();
-                    }
-
-                    // Dans tous les cas, supprimer l'ennemi
-                    Platform.runLater(() -> {
-                        if (gamepane != null && gamepane.getChildren().contains(enemy)) {
-                            gamepane.getChildren().remove(enemy);
-                            enemies.remove(enemy);
-                            createExplosion(enemy.getX() + enemy.getFitWidth()/2,
-                                    enemy.getY() + enemy.getFitHeight()/2);
-                        }
-                    });
-
-                    break;
-                }
-            }
-        }
-    }
-      public void handleServerEnemyCommand(String command) {
-        // Parse the command from server that contains enemy data
-        // Format example: "SPAWN_ENEMY:id=123,x=150,y=0,type=basic"
-        if (command.startsWith("SPAWN_ENEMY:")) {
-            String[] parts = command.substring("SPAWN_ENEMY:".length()).split(",");
-            String enemyId = "";
-            double x = 0;
-            double y = 0;
-            String type = "basic";
-
-            for (String part : parts) {
-                String[] keyValue = part.split("=");
-                if (keyValue.length == 2) {
-                    switch (keyValue[0]) {
-                        case "id": enemyId = keyValue[1]; break;
-                        case "x": x = Double.parseDouble(keyValue[1]); break;
-                        case "y": y = Double.parseDouble(keyValue[1]); break;
-                        case "type": type = keyValue[1]; break;
-                    }
-                }
-            }
-
-            // Create the enemy with the specified ID and position
-            addNetworkEnemy(enemyId, x, y, type);
-        }
-        // Handle enemy movement updates
-        else if (command.startsWith("MOVE_ENEMY:")) {
-            String[] parts = command.substring("MOVE_ENEMY:".length()).split(",");
-            String enemyId = "";
-            double x = 0;
-            double y = 0;
-
-            for (String part : parts) {
-                String[] keyValue = part.split("=");
-                if (keyValue.length == 2) {
-                    switch (keyValue[0]) {
-                        case "id": enemyId = keyValue[1]; break;
-                        case "x": x = Double.parseDouble(keyValue[1]); break;
-                        case "y": y = Double.parseDouble(keyValue[1]); break;
-                    }
-                }
-            }
-
-            // Update the enemy position
-            updateNetworkEnemyPosition(enemyId, x, y);
-        }
-        // Handle enemy destruction
-        else if (command.startsWith("DESTROY_ENEMY:")) {
-            String enemyId = command.substring("DESTROY_ENEMY:".length());
-            removeNetworkEnemy(enemyId);
-        }
-    }
-
-    // Method to add a network-synchronized enemy
-    public void addNetworkEnemy(String enemyId, double x, double y, String type) {
-        Platform.runLater(() -> {
-            if (!gameRunning) return;
-
-            Enemy enemy = new Enemy();
-            ImageView enemyView = enemy.createEnemyAirplane();
-
-            if (enemyView != null) {
-                enemyView.setX(x);
-                enemyView.setY(y);
-                enemyView.getStyleClass().add("enemy-ship");
-                enemyView.setId("enemy-" + enemyId); // Use the server-provided ID
-
-                gamepane.getChildren().add(enemyView);
-                enemies.add(enemyView);
-
-                // Don't animate locally - wait for server updates
-                // Instead use a simplified animation that can be overridden by server updates
-                animateNetworkEnemy(enemyView);
-            }
-        });
-    }
-
-    // Method to update a network enemy's position
-    private void updateNetworkEnemyPosition(String enemyId, double x, double y) {
-        Platform.runLater(() -> {
-            if (!gameRunning) return;
-
-            // Find the enemy with the matching ID
-            for (Node node : gamepane.getChildren()) {
-                if (node instanceof ImageView && node.getId() != null &&
-                        node.getId().equals("enemy-" + enemyId)) {
-                    ImageView enemy = (ImageView) node;
-
-                    // Update position
-                    enemy.setX(x);
-                    enemy.setY(y);
-
-                    // Check for collisions
-                    checkAllPlayersCollision(enemy);
-                    break;
-                }
-            }
-        });
-    }
-
-    // Method to remove a network enemy
-    private void removeNetworkEnemy(String enemyId) {
-        Platform.runLater(() -> {
-            if (!gameRunning) return;
-
-            // Find the enemy with the matching ID
-            for (Node node : gamepane.getChildren()) {
-                if (node instanceof ImageView && node.getId() != null &&
-                        node.getId().equals("enemy-" + enemyId)) {
-                    ImageView enemy = (ImageView) node;
-
-                    // Remove from game
-                    gamepane.getChildren().remove(enemy);
-                    enemies.remove(enemy);
-                    createExplosion(enemy.getX() + enemy.getFitWidth()/2,
-                            enemy.getY() + enemy.getFitHeight()/2);
-                    break;
-                }
-            }
-        });
-    }
-
-    // Simplified animation for network enemies that can be overridden
-    private void animateNetworkEnemy(ImageView enemy) {
-        Timeline animation = new Timeline(
-                new KeyFrame(Duration.millis(16), e -> {
-                    if (!gameRunning) return;
-
-                    // Very minimal movement - will be overridden by server updates
-                    enemy.setY(enemy.getY() + 0.1);
-
-                    // Check if off screen
-                    if (enemy.getY() > WINDOW_HEIGHT) {
-                        Platform.runLater(() -> {
-                            if (gamepane != null && gamepane.getChildren().contains(enemy)) {
-                                gamepane.getChildren().remove(enemy);
-                                enemies.remove(enemy);
-                            }
-                        });
-                    } else {
-                        // Check collisions
-                        checkAllPlayersCollision(enemy);
-                    }
-                })
-        );
-        animation.setCycleCount(Animation.INDEFINITE);
-        animation.play();
-        activeAnimations.add(animation);
-    }
-
-    // 2. Modify the setupEnemySpawning method for multiplayer mode
-
-    // Helper method to send messages to all clients (to be implemented with your network code)
-    private void sendToAllClients(String message) {
-        // Implement according to your network architecture
-        // This is where you would use your socket connection to broadcast to all clients
-        if (out != null) {
-            try {
-                out.println("GAME:" + message);
-                out.flush();
-            } catch (Exception e) {
-                System.err.println("Error sending message to clients: " + e.getMessage());
-            }
-        }
-    }
-
-    // 3. Update the client message handling code to process server enemy commands
-// This would go in your client message processing method
-
-    // Méthode pour gérer l'arrivée d'un nouveau joueur
-    public void handlePlayerJoin(String username, String aircraftType) {
-        if (!connectedPlayers.contains(username)) {
-            Platform.runLater(() -> {
-                // Ajouter ce joueur à nos listes
-                connectedPlayers.add(username);
-                playerAircraftTypes.put(username, aircraftType);
-
-                // Créer la vue pour ce nouveau joueur
-                createRemotePlayerView(username, aircraftType);
-
-                // Notification
-                showNotification("Joueur " + username + " a rejoint la partie!", 2000);
-            });
-        }
-    }
-
-    // Méthode pour créer la vue d'un joueur distant
-    private ImageView createRemotePlayerView(String username, String aircraftType) {
-        if (gamepane == null) return null;
-
-        // Créer la vue du joueur
-        ImageView playerView = new ImageView();
-
-        // Charger l'image selon le type d'avion
-        try {
-            Image aircraftImage = new Image(getClass().getResourceAsStream("/img/aircraft/" + aircraftType + ".png"));
-            playerView.setImage(aircraftImage);
-        } catch (Exception e) {
-            // Image par défaut si problème
-            try {
-                playerView.setImage(new Image(getClass().getResourceAsStream("/img/aircraft/default.png")));
-            } catch (Exception ex) {
-                System.err.println("Impossible de charger l'image par défaut: " + ex.getMessage());
-                return null;
-            }
-        }
-
-        // Configuration de base
-        playerView.setId("player-" + username);
-        playerView.setFitWidth(PLAYER_WIDTH);
-        playerView.setFitHeight(PLAYER_HEIGHT);
-
-        // Position initiale (centre de l'écran)
-        playerView.setX(WINDOW_WIDTH / 2 - PLAYER_WIDTH / 2);
-        playerView.setY(WINDOW_HEIGHT / 2 - PLAYER_HEIGHT / 2);
-
-        // Effet visuel pour distinguer les autres joueurs
-        if (!username.equals(currentUsername)) {
-            DropShadow glow = new DropShadow();
-            glow.setColor(Color.BLUE);
-            glow.setRadius(10);
-            playerView.setEffect(glow);
-        }
-
-        // Ajouter un label avec le nom
-        Label nameLabel = new Label(username);
-        nameLabel.setTextFill(Color.WHITE);
-        nameLabel.setStyle("-fx-background-color: rgba(0,0,0,0.5); -fx-padding: 2px 5px; -fx-background-radius: 3px;");
-
-        // Conteneur pour le nom
-        StackPane nameContainer = new StackPane(nameLabel);
-        nameContainer.setLayoutX(playerView.getX());
-        nameContainer.setLayoutY(playerView.getY() - 20);
-        nameContainer.setId("name-" + username);
-
-        // Ajouter à la scène
-        gamepane.getChildren().addAll(playerView, nameContainer);
-
-        // Stocker la référence
-        playerViews.put(username, playerView);
-
-        return playerView;
-    }
-
-    // Méthode pour mettre à jour la position d'un joueur distant
-    public void updateRemotePlayerPosition(String username, double x, double y) {
-        Platform.runLater(() -> {
-            if (!gameRunning) return;
-
-            ImageView playerView = playerViews.get(username);
-            if (playerView != null) {
-                // Mise à jour de la position de l'avion
-                playerView.setX(x);
-                playerView.setY(y);
-
-                // Mise à jour de la position du nom
-                Node nameContainer = gamepane.lookup("#name-" + username);
-                if (nameContainer != null) {
-                    nameContainer.setLayoutX(x + PLAYER_WIDTH/2 - nameContainer.getBoundsInLocal().getWidth()/2);
-                    nameContainer.setLayoutY(y - 20);
-                }
-            } else if (connectedPlayers.contains(username)) {
-                // Si le joueur est connu mais sa vue n'existe pas encore, la créer
-                String aircraftType = playerAircraftTypes.getOrDefault(username, "default");
-                createRemotePlayerView(username, aircraftType);
-            }
-        });
-    }
-
-    // Méthode pour gérer le départ d'un joueur
-    public void handlePlayerLeave(String username) {
-        if (connectedPlayers.contains(username)) {
-            Platform.runLater(() -> {
-                // Supprimer les éléments visuels
-                ImageView playerView = playerViews.remove(username);
-                if (playerView != null) {
-                    gamepane.getChildren().remove(playerView);
-                }
-
-                Node nameContainer = gamepane.lookup("#name-" + username);
-                if (nameContainer != null) {
-                    gamepane.getChildren().remove(nameContainer);
-                }
-
-                // Mettre à jour les listes
-                connectedPlayers.remove(username);
-                playerAircraftTypes.remove(username);
-
-                // Notification
-                showNotification("Joueur " + username + " a quitté la partie.", 2000);
-            });
-        }
-    }
-
-    // Méthode pour gérer un tir distant
-    public void handleRemotePlayerFire(String username, double x, double y) {
-        Platform.runLater(() -> {
-            if (!gameRunning) return;
-
-            ImageView playerView = playerViews.get(username);
-            if (playerView != null) {
-                // Créer le laser
-                Rectangle laser = new Rectangle(x + PLAYER_WIDTH/2 - 2, y - 20, 4, 15);
-                laser.setFill(Color.RED);
-                laser.setEffect(new Glow(0.8));
-
-                // Ajouter à la scène
-                gamepane.getChildren().add(laser);
-
-                // Effets visuels de tir
-                createMuzzleFlash(x + PLAYER_WIDTH/2, y);
-
-                // Animation du laser
-                Timeline timeline = new Timeline(
-                        new KeyFrame(Duration.ZERO, new KeyValue(laser.yProperty(), laser.getY())),
-                        new KeyFrame(Duration.seconds(1), new KeyValue(laser.yProperty(), -100))
-                );
-
-                timeline.setOnFinished(e -> {
-                    gamepane.getChildren().remove(laser);
-                });
-
-                timeline.play();
-                activeAnimations.add(timeline);
-
-                // Gérer les collisions du laser
-                new AnimationTimer() {
-                    @Override
-                    public void handle(long now) {
-                        checkLaserCollisions(gamepane, laser);
-                        if (!gamepane.getChildren().contains(laser)) {
-                            this.stop();
-                        }
-                    }
-                }.start();
-            }
-        });
-    }
-
-    // Effet de tir
-    private void createMuzzleFlash(double x, double y) {
-        Circle flash = new Circle(x, y, 10, Color.YELLOW);
-        flash.setOpacity(0.8);
-        flash.setEffect(new Glow(0.9));
-
-        gamepane.getChildren().add(flash);
-
-        FadeTransition fade = new FadeTransition(Duration.millis(150), flash);
-        fade.setFromValue(0.8);
-        fade.setToValue(0);
-        fade.setOnFinished(e -> gamepane.getChildren().remove(flash));
-        fade.play();
-    }
-    public void handleServerMessage(String message) {
-        try {
-            if (message.startsWith("PLAYER_JOIN:")) {
-                // Nouveau joueur rejoint
-                String[] parts = message.substring("PLAYER_JOIN:".length()).split(",");
-                if (parts.length >= 2) {
-                    String username = parts[0];
-                    String aircraftType = parts[1];
-                    handlePlayerJoin(username, aircraftType);
-                }
-            }
-            else if (message.startsWith("PLAYER_LEAVE:")) {
-                // Un joueur quitte
-                String username = message.substring("PLAYER_LEAVE:".length());
-                handlePlayerLeave(username);
-            }
-            else if (message.startsWith("PLAYER_POS:")) {
-                // Mise à jour de position d'un joueur
-                String[] parts = message.substring("PLAYER_POS:".length()).split(",");
-                if (parts.length >= 3) {
-                    String username = parts[0];
-                    double x = Double.parseDouble(parts[1]);
-                    double y = Double.parseDouble(parts[2]);
-                    updateRemotePlayerPosition(username, x, y);
-                }
-            }
-            else if (message.startsWith("PLAYER_FIRE:")) {
-                // Un joueur tire
-                String[] parts = message.substring("PLAYER_FIRE:".length()).split(",");
-                if (parts.length >= 3) {
-                    String username = parts[0];
-                    double x = Double.parseDouble(parts[1]);
-                    double y = Double.parseDouble(parts[2]);
-                    handleRemotePlayerFire(username, x, y);
-                }
-            }
-            else if (message.startsWith("GAME:")) {
-                // Commande liée au jeu (ennemis, etc.)
-                String gameCommand = message.substring("GAME:".length());
-                handleServerEnemyCommand(gameCommand);
-            }
-        } catch (Exception e) {
-            System.err.println("Erreur lors du traitement du message: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
 }
