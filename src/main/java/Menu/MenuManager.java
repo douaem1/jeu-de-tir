@@ -121,7 +121,7 @@ public class MenuManager {
                 animation.playButtonPressAnimation(startBtn);
 
                 // Create and show the player selection interface
-                PlayerSelectionInterface selectionInterface = new PlayerSelectionInterface(primaryStage);
+                PlayerSelectionInterfaceGuest selectionInterface = new PlayerSelectionInterfaceGuest(primaryStage);
 
                 // We need to pass the GameManager to the selection interface
                 // so that when aircraft is selected, it can properly start the game

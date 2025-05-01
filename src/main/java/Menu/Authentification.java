@@ -28,9 +28,8 @@ import design.animation;
 import javafx.scene.Scene;
 import javafx.application.Platform;
 
-/**
- * This class handles the user authentication process, including sign-in and sign-up functionalities.
- * It provides a graphical user interface for users to input their credentials and interact with the application.
+/*This class handles the user authentication process, including sign-in and sign-up functionalities.
+  It provides a graphical user interface for users to input their credentials and interact with the application.
  */
 
 public class Authentification {
