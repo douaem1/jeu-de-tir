@@ -92,7 +92,7 @@ public class scores {
     public void DeleteScore(scores score){
         try {
             Statement stm = ConnexionDB.seConnecter();
-            stm.executeUpdate("DELETE FROM score WHERE username='" + score.getUsername() + "'");
+            stm.executeUpdate("DELETE FROM scores WHERE username='" + score.getUsername() + "'");
         } catch (Exception e) {
             e.printStackTrace();
         }

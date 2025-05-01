@@ -76,6 +76,7 @@ public class GameManager {
     public PrintWriter out;
     public TextArea chatArea;
     public String selectedAircraft;
+    private long startTime;
 
     public GameManager() {
         this.primaryStage = primaryStage;
