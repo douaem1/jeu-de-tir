@@ -9,9 +9,10 @@ import javafx.scene.paint.*;
 import javafx.scene.shape.*;
 import javafx.util.Duration;
 
+
 public class Player {
     // Référence directe au GameManager parent
-    private GameManager gameManager;
+    public  GameManager gameManager;
     private String selectedAircraft;
 
     // Constantes
@@ -23,6 +24,11 @@ public class Player {
         if (gameManager != null) {
             this.selectedAircraft = gameManager.selectedAircraft;
         }
+    }
+
+    public Player(int i, int i1, String selectedAircraft) {
+        this.selectedAircraft = selectedAircraft;
+
     }
 
     public void fireEnhancedLaser(Pane gamePane, ImageView player) {
