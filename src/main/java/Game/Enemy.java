@@ -9,6 +9,7 @@ import javafx.scene.shape.*;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 
+import java.io.InputStream;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -69,28 +70,63 @@ public class Enemy {
     }
     public ImageView createEnemyAirplane() {
         try {
-            Image enemyImage = new Image(getClass().getResourceAsStream("/enemy.png"));
-            ImageView enemy = new ImageView(enemyImage);
+            //  charger l'image depuis les ressources
+            InputStream is = getClass().getResourceAsStream("/enemy.png");
+            if (is != null) {
+                Image enemyImage = new Image(is);
+                ImageView enemy = new ImageView(enemyImage);
 
-            double width = 100;
-            double height = 50;
-            enemy.setFitWidth(width);
-            enemy.setFitHeight(height);
-            enemy.setPreserveRatio(true);
-            enemy.setX(Math.random() * (GameManager.WINDOW_WIDTH - width));
-            enemy.setY(-height);
-            enemy.setEffect(new DropShadow(10, Color.RED));
+                // Générer des dimensions aléatoires pour la largeur et la hauteur
+                double width = 100; // Largeur entre 80 et 150
+                double height = 50;  // Hauteur entre 30 et 60
 
-            // Démarrer le tir si niveau >= 5
-            if (gameManager.currentLevel >=6) {
-                scheduleEnemyShots(enemy);
+                // Appliquer les dimensions aléatoires
+                enemy.setFitWidth(width);
+                enemy.setFitHeight(height);
+                enemy.setPreserveRatio(true);
+
+                // Position aléatoire en X, apparition hors écran en Y
+                enemy.setX(Math.random() * (WINDOW_WIDTH - width));
+                enemy.setY(-height);  // Commence au-dessus de l'écran
+
+                // Effet visuel optionnel
+                enemy.setEffect(new DropShadow(10, Color.RED));
+
+                return enemy;
             }
-
-            return enemy;
         } catch (Exception e) {
             System.err.println("Erreur de chargement de l'image ennemi: " + e.getMessage());
-            return createFallbackEnemy();
         }
+
+        // 2. Fallback graphique si l'image n'est pas trouvée
+        Polygon enemyShape = new Polygon(
+                0.0, 20.0,
+                15.0, 0.0,
+                30.0, 20.0,
+                25.0, 20.0,
+                25.0, 40.0,
+                5.0, 40.0,
+                5.0, 20.0
+        );
+
+        enemyShape.setFill(COLORS.get("DANGER"));  // Rouge
+        enemyShape.setStroke(COLORS.get("LIGHT")); // Bordure blanche
+        enemyShape.setStrokeWidth(2);
+
+        // Création d'une ImageView à partir du Polygon
+        ImageView fallbackEnemy = new ImageView(enemyShape.snapshot(null, null));
+
+        // Générer des dimensions aléatoires pour le fallback
+        double fallbackWidth = 80 + Math.random() * 70;  // Largeur entre 80 et 150
+        double fallbackHeight = 30 + Math.random() * 30; // Hauteur entre 30 et 60
+
+        // Appliquer les dimensions aléatoires
+        fallbackEnemy.setFitWidth(fallbackWidth);
+        fallbackEnemy.setFitHeight(fallbackHeight);
+        fallbackEnemy.setX(Math.random() * (WINDOW_WIDTH - fallbackWidth));
+        fallbackEnemy.setY(-fallbackHeight);
+
+        return fallbackEnemy;
     }
     private ImageView createFallbackEnemy() {
         // 2. Fallback graphique si l'image n'est pas trouvée
