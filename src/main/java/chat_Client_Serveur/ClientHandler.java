@@ -3,6 +3,8 @@ package chat_Client_Serveur;
 import java.io.*;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.stream.Collectors;
+
 //it is runned by the thread so we don't have a main methode in here
 public class ClientHandler implements Runnable {
     //list of clients : keep track of all our clients so whenever a client sends a mssg we can loop through our arraylist and send the mssg to each client
@@ -44,8 +46,24 @@ public class ClientHandler implements Runnable {
             try {
                 //prog will hold here til we receive a mssg from a client
                 //we want to run this on a separate thread so the rest of our game isn't stopped by this line (blocking operation)
+                //pour que le programme fait la difference entre un mssg privé et autre
                 mssgFromClient = bufferedReader.readLine();
-                broadcastMssg(mssgFromClient);
+                if (mssgFromClient != null) {
+                    if (mssgFromClient.startsWith("/pm")) {
+                        sendPrivateMssg(mssgFromClient);
+                    }else if (mssgFromClient.startsWith("/list")) {
+                            try {
+                                // Envoyer la réponse UNIQUEMENT au client demandeur
+                                bufferedWriter.write("Connected players: " + getConnectedUsers()); // Pas d'espace avant ":"
+                                bufferedWriter.newLine();
+                                bufferedWriter.flush();
+                            } catch (IOException ex) {
+                                closeEverything(socket, bufferedReader, bufferedWriter);
+                            }
+                    }else {
+                        broadcastMssg(mssgFromClient);
+                    }
+                }
             }catch (IOException e){
                 closeEverything(socket,bufferedReader,bufferedWriter);
                 //when the client disconnects this will break us out of the while loop
@@ -60,7 +78,7 @@ public class ClientHandler implements Runnable {
                 //we want to broadcast the mssg to everyone except the user who sent it
                 if (!clientHandler.ClientUserName.equals(ClientUserName)) {
                     clientHandler.bufferedWriter.write(mssg);
-                    //send over a new linw char
+                    //send over a new line char
                     clientHandler.bufferedWriter.newLine();
                     //flush our bufferedWriter:buffer needs to be full before it is sent and the mssg maybe will be too short for filling it so we have to flush manually
                     clientHandler.bufferedWriter.flush();
@@ -91,5 +109,28 @@ public class ClientHandler implements Runnable {
         }catch (IOException e){
             e.printStackTrace();
         }
+    }
+    //methode pour les mssgs privé
+    public void sendPrivateMssg(String mssg){
+        String[] parts = mssg.split(" ", 3); // "/pm" , "UserName" , "Mssg"
+        String recipient = parts[1];
+        String privateMssg = parts[2];
+        for (ClientHandler client : clientHandlers) {
+            if (client.ClientUserName.equals(recipient)){
+                try {
+                    client.bufferedWriter.write("[Private] " + ClientUserName + " : " + privateMssg);
+                    client.bufferedWriter.newLine();
+                    client.bufferedWriter.flush();
+                }catch (IOException e){
+                    closeEverything(socket,bufferedReader,bufferedWriter);
+                }
+            }
+        }
+    }
+    //pour que le client peut avoir la liste des utilisateurs connectés au chat
+    public static String getConnectedUsers(){
+        return clientHandlers.stream()
+                .map(client -> client.ClientUserName)
+                .collect(Collectors.joining(", "));
     }
 }

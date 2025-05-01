@@ -1,9 +1,11 @@
 package chat_Client_Serveur;
 
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
+import javafx.scene.paint.Color;
 
 public class GameChat {
     private VBox chatContainer;
@@ -26,7 +28,6 @@ public class GameChat {
         chatContainer = new VBox(10);
         chatContainer.setAlignment(Pos.BOTTOM_RIGHT);
         chatContainer.setPadding(new Insets(10));
-        // Modifier le style pour qu'il soit semi-transparent
         chatContainer.setStyle("-fx-background-color: rgba(0, 0, 0, 0.7); -fx-background-radius: 10;");
         chatContainer.setVisible(true);
         chatContainer.setMaxSize(300, 200);
@@ -36,6 +37,9 @@ public class GameChat {
         Button closeBtn = new Button("×");
         closeBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: white;");
         closeBtn.setOnAction(e -> toggleVisibility());
+
+        Label helpLabel = new Label("Tapez /pm [Nom] [Message] pour un message privé !");
+        helpLabel.setTextFill(Color.LIGHTGRAY);
 
         chatArea = new TextArea();
         chatArea.setEditable(false);
@@ -53,7 +57,9 @@ public class GameChat {
                 "-fx-prompt-text-fill: #aaaaaa;");
 
         header.getChildren().add(closeBtn);
-        chatContainer.getChildren().addAll(header, chatArea, inputField);
+
+        chatContainer.getChildren().addAll(header, helpLabel, chatArea, inputField);
+
         root.getChildren().add(chatContainer);
 
         toggleBtn = new Button("Chat");
@@ -113,5 +119,10 @@ public class GameChat {
         chatContainer.setTranslateY(windowHeight - 220);
         toggleBtn.setTranslateX(windowWidth - 100);
         toggleBtn.setTranslateY(windowHeight - 50);
+    }
+    public void appendToChat(String message) {
+        Platform.runLater(() -> {
+            chatArea.appendText("\n" + message);
+        });
     }
 }

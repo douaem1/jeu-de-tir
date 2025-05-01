@@ -76,7 +76,7 @@ public class Enemy {
     public ImageView createEnemyAirplane() {
         try {
             //  charger l'image depuis les ressources
-            InputStream is = getClass().getResourceAsStream("/enemy.png");
+            InputStream is = getClass().getResourceAsStream("/Boss_1_A_Medium.png");
             if (is != null) {
                 Image enemyImage = new Image(is);
                 ImageView enemy = new ImageView(enemyImage);
