@@ -198,6 +198,13 @@ public class GameManager {
                 // Créer le joueur principal
                 Player playerClass = new Player(this);
                 player = playerClass.createPlayer();
+
+                // Position initiale au centre
+                double initialX = WINDOW_WIDTH / 2 - PLAYER_WIDTH / 2;
+                double initialY = WINDOW_HEIGHT - PLAYER_HEIGHT - 50;
+                player.setX(initialX);
+                player.setY(initialY);
+
                 gamepane.getChildren().add(player);
                 hud = new HUD(this);
                 hud.setupHUD();
@@ -206,9 +213,8 @@ public class GameManager {
 
                 // Ajouter le joueur à la liste des vues
                 playerViews.put(currentUsername, player);
-
-                // Initialiser le HUD
-
+                playerAircraftTypes.put(currentUsername, selectedAircraft);
+                connectedPlayers.add(currentUsername);
 
                 // Setup des contrôles
                 setupControls();
@@ -226,8 +232,11 @@ public class GameManager {
 
                 // Si en mode multijoueur, informer les autres de notre présence
                 if (isMultiplayerMode && out != null) {
-                    out.println("PLAYER_JOIN:" + currentUsername + "," + selectedAircraft);
+                    // Envoyer PLAYER_JOIN avec position initiale
+                    out.println("PLAYER_JOIN:" + currentUsername + "," + selectedAircraft + "," + initialX + "," + initialY);
                     out.flush();
+
+                    System.out.println("Sent initial player position: " + initialX + "," + initialY);
                 }
 
                 System.out.println("Game started successfully");
@@ -238,16 +247,36 @@ public class GameManager {
             }
         });
     }
-
     // Méthode à appeler lorsque le joueur se déconnecte
     public void disconnectFromMultiplayerGame() {
         if (isMultiplayerMode && out != null) {
             out.println("PLAYER_LEAVE:" + currentUsername);
             out.flush();
             isMultiplayerMode = false;
+
+            // Nettoyer les listes
+            connectedPlayers.clear();
+            playerAircraftTypes.clear();
+
+            // Supprimer les vues des joueurs distants
+            for (String player : new HashSet<>(playerViews.keySet())) {
+                if (!player.equals(currentUsername)) {
+                    ImageView view = playerViews.remove(player);
+                    if (view != null && gamepane != null) {
+                        Platform.runLater(() -> gamepane.getChildren().remove(view));
+                    }
+
+                    final String playerId = player;
+                    Platform.runLater(() -> {
+                        Node nameLabel = gamepane.lookup("#name-" + playerId);
+                        if (nameLabel != null) {
+                            gamepane.getChildren().remove(nameLabel);
+                        }
+                    });
+                }
+            }
         }
     }
-
     public void setupControls() {
         if (gamepane == null) return;
 
@@ -257,58 +286,78 @@ public class GameManager {
         // Création d'une instance de Player unique pour gérer les tirs
         Player playerClass = new Player(this);
 
+        // Gérer les touches enfoncées
         gamepane.setOnKeyPressed(e -> {
             if (!gameRunning) return;
 
             keysPressed.add(e.getCode());
-            double speed = 8;
-            boolean positionChanged = false;
 
-            switch (e.getCode()) {
-                case LEFT:
-                    player.setX(Math.max(0, player.getX() - speed));
-                    positionChanged = true;
-                    break;
-                case RIGHT:
-                    player.setX(Math.min(WINDOW_WIDTH - player.getFitWidth(), player.getX() + speed));
-                    positionChanged = true;
-                    break;
-                case UP:
-                    player.setY(Math.max(0, player.getY() - speed));
-                    positionChanged = true;
-                    break;
-                case DOWN:
-                    player.setY(Math.min(WINDOW_HEIGHT - player.getFitHeight(), player.getY() + speed));
-                    positionChanged = true;
-                    break;
-                case SPACE:
-                    System.out.println("Space key pressed - firing laser");
-                    playerClass.fireEnhancedLaser(gamepane, player);
+            // Traiter le tir immédiatement
+            if (e.getCode() == KeyCode.SPACE) {
+                System.out.println("Space key pressed - firing laser");
+                playerClass.fireEnhancedLaser(gamepane, player);
 
-                    // Envoyer l'événement de tir aux autres clients
-                    if (out != null && isMultiplayerMode) {
-                        out.println("PLAYER_FIRE:" + currentUsername + "," + player.getX() + "," + player.getY());
-                        out.flush();
-                    }
-                    break;
-                case ESCAPE:
-                    stopGame();
-                    setupMainMenu();
-                    break;
-            }
-
-            // Envoyer la mise à jour de position si nécessaire
-            if (positionChanged && out != null && isMultiplayerMode) {
-                out.println("PLAYER_POS:" + currentUsername + "," + player.getX() + "," + player.getY());
-                out.flush();
+                // Envoyer l'événement de tir aux autres clients
+                if (out != null && isMultiplayerMode) {
+                    out.println("PLAYER_FIRE:" + currentUsername + "," + player.getX() + "," + player.getY());
+                    out.flush();
+                }
+            } else if (e.getCode() == KeyCode.ESCAPE) {
+                stopGame();
+                setupMainMenu();
             }
         });
 
         gamepane.setOnKeyReleased(e -> {
             keysPressed.remove(e.getCode());
         });
-    }
 
+        // Animation de mise à jour de position
+        AnimationTimer positionUpdater = new AnimationTimer() {
+            private long lastUpdateTime = 0;
+
+            @Override
+            public void handle(long now) {
+                if (!gameRunning) return;
+
+                // Mettre à jour la position selon les touches enfoncées
+                double speed = 8;
+                boolean positionChanged = false;
+
+                if (keysPressed.contains(KeyCode.LEFT) || keysPressed.contains(KeyCode.A)) {
+                    player.setX(Math.max(0, player.getX() - speed));
+                    positionChanged = true;
+                }
+                if (keysPressed.contains(KeyCode.RIGHT) || keysPressed.contains(KeyCode.D)) {
+                    player.setX(Math.min(WINDOW_WIDTH - player.getFitWidth(), player.getX() + speed));
+                    positionChanged = true;
+                }
+                if (keysPressed.contains(KeyCode.UP) || keysPressed.contains(KeyCode.W)) {
+                    player.setY(Math.max(0, player.getY() - speed));
+                    positionChanged = true;
+                }
+                if (keysPressed.contains(KeyCode.DOWN) || keysPressed.contains(KeyCode.S)) {
+                    player.setY(Math.min(WINDOW_HEIGHT - player.getFitHeight(), player.getY() + speed));
+                    positionChanged = true;
+                }
+
+                // Envoyer la position seulement si changée et pas trop fréquemment
+                if (positionChanged && out != null && isMultiplayerMode) {
+                    // Limiter l'envoi à 30 fois par seconde
+                    if (now - lastUpdateTime > 33_000_000) { // 33ms en nanosecondes
+                        out.println("PLAYER_POS:" + currentUsername + "," + player.getX() + "," + player.getY());
+                        out.flush();
+                        lastUpdateTime = now;
+                    }
+                }
+            }
+        };
+
+        positionUpdater.start();
+
+        // Stocker l'animation pour pouvoir l'arrêter plus tard
+        //activeAnimations.add(positionUpdater);
+    }
     public void setupEnemySpawning() {
         Timeline enemySpawner = new Timeline(
                 new KeyFrame(Duration.seconds(2), event -> {
@@ -732,25 +781,41 @@ public class GameManager {
      * Met à jour les données des joueurs reçues du serveur
      */
 
+    // Variables de classe importantes
+// État d'invincibilité
+    private boolean isProcessingHit = false; // Nouvel indicateur pour éviter le traitement multiple
+    private Timeline invincibilityTimeline; // Référence à l'animation d'invincibilité
+    private long lastHitTime = 0; // Timestamp de la dernière collision
+
     public void checkPlayerCollision(ImageView enemy) {
-        // 1) Basic conditions
-        if (player == null || !gameRunning || lives <= 0) return;
+        // 1) Vérifications de base et sortie rapide si nécessaire
+        if (player == null || !gameRunning || lives <= 0) {
+            return;
+        }
 
-        // 2) Skip if player is invincible
-        if (isInvincible) return;
+        // IMPORTANT: Vérifier l'invincibilité et si un hit est déjà en cours de traitement
+        if (isInvincible || isProcessingHit) {
+            // Si le joueur est invincible ou déjà en train de traiter un hit, ignorer la collision
+            return;
+        }
 
-        // 3) Use more precise collision detection with smaller bounds
-        // Create reduced bounding boxes for more accurate collision detection
+        // Vérifier si suffisamment de temps s'est écoulé depuis le dernier hit (anti-spam)
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastHitTime < 1000) { // Minimum 1 seconde entre les hits
+            return;
+        }
+
+        // 3) Utiliser une détection de collision plus précise avec des limites réduites
         Bounds playerBounds = player.getBoundsInParent();
         Bounds enemyBounds = enemy.getBoundsInParent();
 
-        // Reduce collision area by 20% for more precise detection
+        // Réduire la zone de collision de 20% pour une détection plus précise
         double playerShrinkX = playerBounds.getWidth() * 0.2;
         double playerShrinkY = playerBounds.getHeight() * 0.2;
         double enemyShrinkX = enemyBounds.getWidth() * 0.2;
         double enemyShrinkY = enemyBounds.getHeight() * 0.2;
 
-        // Create adjusted bounds
+        // Créer des limites ajustées
         Bounds adjustedPlayerBounds = new BoundingBox(
                 playerBounds.getMinX() + playerShrinkX,
                 playerBounds.getMinY() + playerShrinkY,
@@ -765,54 +830,94 @@ public class GameManager {
                 enemyBounds.getHeight() - (enemyShrinkY * 2)
         );
 
-        // Check if the adjusted bounds intersect
+        // Vérifier si les limites ajustées se croisent
         if (adjustedPlayerBounds.intersects(adjustedEnemyBounds)) {
-            // Debug output
-            System.out.println("Real collision detected between player and enemy!");
-
-            // Set invincibility immediately
-            isInvincible = true;
-
-            // Remove enemy
-            Platform.runLater(() -> {
-                if (gamepane != null && gamepane.getChildren().contains(enemy)) {
-                    gamepane.getChildren().remove(enemy);
-                    enemies.remove(enemy);
-                    createExplosion(enemy.getX() + enemy.getFitWidth()/2,
-                            enemy.getY() + enemy.getFitHeight()/2);
+            // Protection contre le traitement simultané de plusieurs collisions
+            synchronized (this) {
+                if (isInvincible || isProcessingHit) {
+                    return;
                 }
+
+                // Marquer qu'on est en train de traiter un hit et mettre à jour le timestamp
+                isProcessingHit = true;
+                lastHitTime = currentTime;
+
+                // Définir l'invincibilité IMMÉDIATEMENT avant tout autre traitement
+                isInvincible = true;
+            }
+
+            System.out.println("Collision détectée avec ennemi ID: " + System.identityHashCode(enemy));
+
+            // Supprimer l'ennemi
+            Platform.runLater(() -> {
+                try {
+                    if (gamepane != null && gamepane.getChildren().contains(enemy)) {
+                        gamepane.getChildren().remove(enemy);
+                        if (enemies.contains(enemy)) {
+                            enemies.remove(enemy);
+                        }
+                        createExplosion(enemy.getX() + enemy.getFitWidth()/2,
+                                enemy.getY() + enemy.getFitHeight()/2);
+                    }
+                } catch (Exception e) {
+                    System.err.println("Erreur lors de la suppression de l'ennemi: " + e.getMessage());
+                }
+                // Nous ne réinitialisons PAS isProcessingHit ici - c'est fait dans handlePlayerHit
             });
 
-            // Handle player hit
+            // Gérer le coup du joueur
             handlePlayerHit();
         }
     }
+
     public void handlePlayerHit() {
-        // 1) Retire UNE vie
+        // Ne pas réinitialiser les états ici - seulement retirer une vie
         lives = Math.max(0, lives - 1);
         hud.updateLives(lives);
-        System.out.println("Player hit! Lives left: " + lives);
+        System.out.println("Joueur touché! Vies restantes: " + lives + " à " + System.currentTimeMillis());
 
-        // 2) Animation de clignotement (1.5 s) ET fin de l’invincibilité dans onFinished
-        Timeline blink = new Timeline(
-                new KeyFrame(Duration.ZERO,    new KeyValue(player.opacityProperty(), 0.3)),
-                new KeyFrame(Duration.millis(150), new KeyValue(player.opacityProperty(), 1.0))
+        // Arrêter toute animation d'invincibilité existante
+        if (invincibilityTimeline != null) {
+            invincibilityTimeline.stop();
+        }
+
+        // Créer une nouvelle animation avec clignotement
+        invincibilityTimeline = new Timeline(
+                new KeyFrame(Duration.ZERO, new KeyValue(player.opacityProperty(), 0.3)),
+                new KeyFrame(Duration.millis(200), new KeyValue(player.opacityProperty(), 1.0))
         );
-        blink.setCycleCount(10); // 10 × 150 ms = 1.5 s
-        blink.setAutoReverse(true);
-        blink.setOnFinished(e -> {
-            isInvincible = false;
-            System.out.println("Invincibility ended");
-        });
-        blink.play();
-        activeAnimations.add(blink);
+        invincibilityTimeline.setCycleCount(15); // ~3 secondes au total
+        invincibilityTimeline.setAutoReverse(true);
 
-        // 3) Vérifie Game Over
+        // Éviter de créer plusieurs gestionnaires d'événements
+        invincibilityTimeline.setOnFinished(null);
+        invincibilityTimeline.setOnFinished(e -> {
+            // Ajouter un délai supplémentaire avant de désactiver l'invincibilité
+            PauseTransition invincibilityEndDelay = new PauseTransition(Duration.millis(500));
+            invincibilityEndDelay.setOnFinished(event -> {
+                // S'assurer que cette méthode n'est exécutée qu'une seule fois
+                synchronized (this) {
+                    isInvincible = false;
+                    isProcessingHit = false; // S'assurer que le traitement du hit est terminé
+                    player.setOpacity(1.0);
+                    System.out.println("Période d'invincibilité terminée à " + System.currentTimeMillis());
+                }
+            });
+            invincibilityEndDelay.play();
+        });
+
+        // Démarrer l'animation
+        invincibilityTimeline.play();
+
+        // Vérifier Game Over
         if (lives <= 0) {
             gameRunning = false;
             gameOver(gamepane);
         }
     }
+
+    // Ajouter cette méthode pour vérifier si des collisions fantômes sont détectées
+
     public void animateEnemy(ImageView enemy) {
         Timeline animation = new Timeline(
                 new KeyFrame(Duration.millis(8), e -> {
@@ -1114,22 +1219,34 @@ public class GameManager {
         Platform.runLater(() -> {
             if (!gameRunning) return;
 
+            // Si le joueur n'est pas encore dans notre vue, le créer
+            if (!playerViews.containsKey(username)) {
+                String aircraftType = playerAircraftTypes.getOrDefault(username, "default");
+                createPlayerAircraft(username, aircraftType, x, y);
+                return;
+            }
+
+            // Mettre à jour la position
             ImageView playerView = playerViews.get(username);
             if (playerView != null) {
-                // Mise à jour de la position de l'avion
-                playerView.setX(x);
-                playerView.setY(y);
+                // Animation fluide pour déplacer l'avion
+                TranslateTransition transition = new TranslateTransition(Duration.millis(100), playerView);
+                transition.setToX(x - playerView.getX());
+                transition.setToY(y - playerView.getY());
+                transition.setOnFinished(e -> {
+                    playerView.setX(x);
+                    playerView.setY(y);
+                    playerView.setTranslateX(0);
+                    playerView.setTranslateY(0);
 
-                // Mise à jour de la position du nom
-                Node nameContainer = gamepane.lookup("#name-" + username);
-                if (nameContainer != null) {
-                    nameContainer.setLayoutX(x + PLAYER_WIDTH/2 - nameContainer.getBoundsInLocal().getWidth()/2);
-                    nameContainer.setLayoutY(y - 20);
-                }
-            } else if (connectedPlayers.contains(username)) {
-                // Si le joueur est connu mais sa vue n'existe pas encore, la créer
-                String aircraftType = playerAircraftTypes.getOrDefault(username, "default");
-                createRemotePlayerView(username, aircraftType);
+                    // Mettre à jour la position du nom
+                    Node nameContainer = gamepane.lookup("#name-" + username);
+                    if (nameContainer != null) {
+                        nameContainer.setLayoutX(x + PLAYER_WIDTH/2 - nameContainer.getBoundsInLocal().getWidth()/2);
+                        nameContainer.setLayoutY(y - 20);
+                    }
+                });
+                transition.play();
             }
         });
     }
@@ -1221,12 +1338,39 @@ public class GameManager {
     public void handleServerMessage(String message) {
         try {
             if (message.startsWith("PLAYER_JOIN:")) {
-                // Nouveau joueur rejoint
+                // Format: PLAYER_JOIN:username,aircraftType,x,y
                 String[] parts = message.substring("PLAYER_JOIN:".length()).split(",");
                 if (parts.length >= 2) {
                     String username = parts[0];
                     String aircraftType = parts[1];
-                    handlePlayerJoin(username, aircraftType);
+
+                    // Si le message contient aussi des coordonnées
+                    double x = WINDOW_WIDTH / 2 - PLAYER_WIDTH / 2;  // position par défaut
+                    double y = WINDOW_HEIGHT - PLAYER_HEIGHT - 50;
+
+                    if (parts.length >= 4) {
+                        try {
+                            x = Double.parseDouble(parts[2]);
+                            y = Double.parseDouble(parts[3]);
+                        } catch (NumberFormatException e) {
+                            System.err.println("Invalid position format: " + e.getMessage());
+                        }
+                    }
+
+                    // Ne pas créer d'avion pour le joueur local
+                    if (!username.equals(currentUsername)) {
+                        createPlayerAircraft(username, aircraftType, x, y);
+                        System.out.println("Remote player joined: " + username + " at position " + x + "," + y);
+
+                        // Envoyer notre propre position à ce joueur pour qu'il nous voie aussi
+                        if (player != null && out != null) {
+                            out.println("PLAYER_POS:" + currentUsername + "," + player.getX() + "," + player.getY());
+                            out.flush();
+                        }
+                    }
+
+                    // Notification
+                    showNotification("Joueur " + username + " a rejoint la partie!", 2000);
                 }
             }
             else if (message.startsWith("PLAYER_LEAVE:")) {
@@ -1235,13 +1379,17 @@ public class GameManager {
                 handlePlayerLeave(username);
             }
             else if (message.startsWith("PLAYER_POS:")) {
-                // Mise à jour de position d'un joueur
+                // Format: PLAYER_POS:username,x,y
                 String[] parts = message.substring("PLAYER_POS:".length()).split(",");
                 if (parts.length >= 3) {
                     String username = parts[0];
                     double x = Double.parseDouble(parts[1]);
                     double y = Double.parseDouble(parts[2]);
-                    updateRemotePlayerPosition(username, x, y);
+
+                    // Ne pas mettre à jour notre propre position à partir du serveur
+                    if (!username.equals(currentUsername)) {
+                        updateRemotePlayerPosition(username, x, y);
+                    }
                 }
             }
             else if (message.startsWith("PLAYER_FIRE:")) {
@@ -1413,6 +1561,80 @@ public class GameManager {
                 System.err.println("Critical error launching friendly multiplayer mode: " + e.getMessage());
                 setupMainMenu();
             }
+        });
+    }
+    public void createPlayerAircraft(String username, String aircraftType, double x, double y) {
+        Platform.runLater(() -> {
+            if (!gameRunning) return;
+
+            // Si le joueur existe déjà, on met seulement à jour sa position
+            if (playerViews.containsKey(username)) {
+                ImageView existingPlayer = playerViews.get(username);
+                existingPlayer.setX(x);
+                existingPlayer.setY(y);
+
+                // Mettre à jour la position du nom aussi
+                Node nameLabel = gamepane.lookup("#name-" + username);
+                if (nameLabel != null) {
+                    nameLabel.setLayoutX(x + PLAYER_WIDTH/2 - nameLabel.getBoundsInLocal().getWidth()/2);
+                    nameLabel.setLayoutY(y - 20);
+                }
+                return;
+            }
+
+            // Créer une nouvelle vue pour le joueur
+            ImageView playerView = new ImageView();
+            try {
+                // Charger l'image correspondant au type d'avion
+                String imagePath = "/img/aircraft/" + aircraftType + ".png";
+                Image aircraftImage = new Image(getClass().getResourceAsStream(imagePath));
+                playerView.setImage(aircraftImage);
+                System.out.println("Aircraft image loaded: " + imagePath);
+            } catch (Exception e) {
+                System.err.println("Unable to load aircraft image for type: " + aircraftType);
+                try {
+                    // Utiliser une image par défaut si l'image demandée n'est pas trouvée
+                    playerView.setImage(new Image(getClass().getResourceAsStream("/img/aircraft/default.png")));
+                } catch (Exception ex) {
+                    System.err.println("Failed to load default aircraft image: " + ex.getMessage());
+                    return;
+                }
+            }
+
+            // Configurer l'affichage de l'avion
+            playerView.setId("player-" + username);
+            playerView.setFitWidth(PLAYER_WIDTH);
+            playerView.setFitHeight(PLAYER_HEIGHT);
+            playerView.setX(x);
+            playerView.setY(y);
+
+            // Ajouter un effet visuel pour distinguer les joueurs
+            if (!username.equals(currentUsername)) {
+                DropShadow glow = new DropShadow();
+                glow.setColor(Color.BLUE);
+                glow.setRadius(10);
+                playerView.setEffect(glow);
+            }
+
+            // Créer et ajouter un label avec le nom du joueur
+            Label nameLabel = new Label(username);
+            nameLabel.setTextFill(Color.WHITE);
+            nameLabel.setStyle("-fx-background-color: rgba(0,0,0,0.5); -fx-padding: 2px 5px; -fx-background-radius: 3px;");
+
+            StackPane nameContainer = new StackPane(nameLabel);
+            nameContainer.setLayoutX(x + PLAYER_WIDTH/2 - 30); // Approximation de la largeur
+            nameContainer.setLayoutY(y - 20);
+            nameContainer.setId("name-" + username);
+
+            // Ajouter les éléments à la scène
+            gamepane.getChildren().addAll(playerView, nameContainer);
+
+            // Enregistrer la référence de l'avion
+            playerViews.put(username, playerView);
+            playerAircraftTypes.put(username, aircraftType);
+            connectedPlayers.add(username);
+
+            System.out.println("Created aircraft for player: " + username + " with type: " + aircraftType);
         });
     }
 
