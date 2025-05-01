@@ -24,8 +24,11 @@ import Menu.Authentification;
 
 public class GameManager {
     public Stage primaryStage;
+    public int currentLevel;
+    public double enemySpeed;
     private MenuManager menuManager;
     private Authentification auth;
+    public boolean isInvulnerable = false;
 
     // Configuration
     public static final int WINDOW_WIDTH = 1200;
@@ -269,123 +272,148 @@ public class GameManager {
     }
 
     private void checkPlayerCollision(ImageView enemy) {
-        if (player != null && enemy.getBoundsInParent().intersects(player.getBoundsInParent())) {
+        // Vérifier si le joueur est en vie et s'il n'est pas invulnérable
+        if (player != null && !isInvulnerable && gameRunning && lives > 0 && enemy.getBoundsInParent().intersects(player.getBoundsInParent())) {
             handlePlayerHit();
             Platform.runLater(() -> {
                 if (gamepane != null && gamepane.getChildren().contains(enemy)) {
                     gamepane.getChildren().remove(enemy);
                     enemies.remove(enemy);
+                    createExplosion(enemy.getX() + enemy.getFitWidth()/2, enemy.getY() + enemy.getFitHeight()/2);
                 }
             });
         }
     }
 
-    private void handlePlayerHit() {
+    void handlePlayerHit() {
         lives--;
-        HUD hud = new HUD();
-        hud.updateHUD();
+        System.out.println("Player hit! Lives remaining: " + lives);
 
+        // Rendre le joueur invulnérable temporairement
+        isInvulnerable = true;
+
+        // Mettre à jour le HUD avec le nombre de vies restant
+        if (hud != null) {
+            Platform.runLater(() -> {
+                hud.updateLives(lives);
+            });
+        }
+
+        // Vérifier si le joueur n'a plus de vies
         if (lives <= 0) {
-            gameOver(gamepane);
+            gameOver();
         } else {
+            // Effet de clignotement et invulnérabilité temporaire
             Timeline blink = new Timeline(
                     new KeyFrame(Duration.ZERO, new KeyValue(player.opacityProperty(), 0.3)),
-                    new KeyFrame(Duration.seconds(0.1), new KeyValue(player.opacityProperty(), 1.0))
+                    new KeyFrame(Duration.millis(100), new KeyValue(player.opacityProperty(), 1.0))
             );
-            blink.setCycleCount(6);
+            blink.setCycleCount(10);
+            blink.setOnFinished(e -> {
+                // Désactiver l'invulnérabilité après l'animation
+                isInvulnerable = false;
+            });
             blink.play();
         }
     }
 
-    private void gameOver(Pane gamePane) {
+    private void gameOver() {
+        if (!gameRunning) return; // Éviter d'appeler gameOver plusieurs fois
+
         gameRunning = false;
         design design = new design();
         animation animation = new animation();
         stopAllAnimations();
 
-        // Création du conteneur Game Over
-        VBox gameOverBox = new VBox(20);
-        gameOverBox.setAlignment(Pos.CENTER);
-        gameOverBox.setStyle("-fx-background-color: rgba(0,0,0,0.8); -fx-background-radius: 15;");
-        gameOverBox.setPadding(new Insets(40));
+        Platform.runLater(() -> {
+            try {
+                // Création du conteneur Game Over
+                VBox gameOverBox = new VBox(20);
+                gameOverBox.setAlignment(Pos.CENTER);
+                gameOverBox.setStyle("-fx-background-color: rgba(0,0,0,0.8); -fx-background-radius: 15;");
+                gameOverBox.setPadding(new Insets(40));
 
-        // Titre Game Over
-        Label title = new Label("GAME OVER");
-        title.setFont(Font.font(FONT_FAMILIES[0], FontWeight.EXTRA_BOLD, 56));
-        title.setTextFill(COLORS.get("LIGHT"));
+                // Titre Game Over
+                Label title = new Label("GAME OVER");
+                title.setFont(Font.font(FONT_FAMILIES[0], FontWeight.EXTRA_BOLD, 56));
+                title.setTextFill(COLORS.get("LIGHT"));
 
-        // Affichage du score
-        Label scoreLabel = new Label("Final Score: " + score);
-        scoreLabel.setFont(Font.font(FONT_FAMILIES[1], FontWeight.BOLD, 24));
-        scoreLabel.setTextFill(COLORS.get("LIGHT"));
+                // Affichage du score
+                Label scoreLabel = new Label("Final Score: " + score);
+                scoreLabel.setFont(Font.font(FONT_FAMILIES[1], FontWeight.BOLD, 24));
+                scoreLabel.setTextFill(COLORS.get("LIGHT"));
 
-        // Bouton Play Again
-        Button restartBtn = animation.createActionButton("PLAY AGAIN", "PRIMARY");
-        restartBtn.setPrefWidth(200);
-        restartBtn.setOnAction(e -> {
-            // Nettoyage complet avant de recommencer
-            gamePane.getChildren().clear();
-            enemies.clear();
-            activeAnimations.clear();
-            score = 0;
-            lives = 3;
-            gameRunning = true;
+                // Bouton Play Again
+                Button restartBtn = animation.createActionButton("PLAY AGAIN", "PRIMARY");
+                restartBtn.setPrefWidth(200);
+                restartBtn.setOnAction(e -> {
+                    // Nettoyage complet avant de recommencer
+                    gamepane.getChildren().clear();
+                    enemies.clear();
+                    activeAnimations.clear();
+                    score = 0;
+                    lives = 3;
+                    gameRunning = true;
 
-            // Transition fluide
-            FadeTransition fadeOut = new FadeTransition(Duration.millis(300), gameOverBox);
-            fadeOut.setFromValue(1.0);
-            fadeOut.setToValue(0.0);
-            fadeOut.setOnFinished(event -> {
+                    // Transition fluide
+                    FadeTransition fadeOut = new FadeTransition(Duration.millis(300), gameOverBox);
+                    fadeOut.setFromValue(1.0);
+                    fadeOut.setToValue(0.0);
+                    fadeOut.setOnFinished(event -> {
+                        startGame(selectedAircraft);
+                    });
+                    fadeOut.play();
+                });
 
-                startGame(selectedAircraft);
-            });
-            fadeOut.play();
+                // Bouton Main Menu
+                Button menuBtn = animation.createActionButton("MAIN MENU", "SECONDARY");
+                menuBtn.setPrefWidth(200);
+                menuBtn.setOnAction(e -> {
+                    // Nettoyage complet avant de retourner au menu
+                    gamepane.getChildren().clear();
+                    enemies.clear();
+                    activeAnimations.clear();
+                    score = 0;
+                    lives = 3;
+
+                    // Transition fluide
+                    FadeTransition fadeOut = new FadeTransition(Duration.millis(300), gameOverBox);
+                    fadeOut.setFromValue(1.0);
+                    fadeOut.setToValue(0.0);
+                    fadeOut.setOnFinished(event -> {
+                        setupMainMenu();
+                    });
+                    fadeOut.play();
+                });
+
+                // Assemblage des éléments
+                gameOverBox.getChildren().addAll(title, scoreLabel, restartBtn, menuBtn);
+                gameOverBox.setOpacity(0);
+
+                // Création de l'overlay
+                StackPane overlay = new StackPane(gameOverBox);
+                overlay.setAlignment(Pos.CENTER);
+                overlay.setStyle("-fx-background-color: rgba(0,0,0,0.5);");
+                gamepane.getChildren().add(overlay);
+
+                // Animation d'apparition
+                FadeTransition fadeIn = new FadeTransition(Duration.seconds(0.8), gameOverBox);
+                fadeIn.setToValue(1);
+
+                ScaleTransition scaleIn = new ScaleTransition(Duration.seconds(0.5), gameOverBox);
+                scaleIn.setFromX(0.8);
+                scaleIn.setFromY(0.8);
+                scaleIn.setToX(1.0);
+                scaleIn.setToY(1.0);
+
+                ParallelTransition entrance = new ParallelTransition(fadeIn, scaleIn);
+                entrance.play();
+                activeAnimations.add(entrance);
+            } catch (Exception e) {
+                System.err.println("Error in gameOver: " + e.getMessage());
+                e.printStackTrace();
+            }
         });
-
-        // Bouton Main Menu
-        Button menuBtn = animation.createActionButton("MAIN MENU", "SECONDARY");
-        menuBtn.setPrefWidth(200);
-        menuBtn.setOnAction(e -> {
-            // Nettoyage complet avant de retourner au menu
-            gamePane.getChildren().clear();
-            enemies.clear();
-            activeAnimations.clear();
-            score = 0;
-            lives = 3;
-
-            // Transition fluide
-            FadeTransition fadeOut = new FadeTransition(Duration.millis(300), gameOverBox);
-            fadeOut.setFromValue(1.0);
-            fadeOut.setToValue(0.0);
-            fadeOut.setOnFinished(event -> {
-                setupMainMenu();
-            });
-            fadeOut.play();
-        });
-
-        // Assemblage des éléments
-        gameOverBox.getChildren().addAll(title, scoreLabel, restartBtn, menuBtn);
-        gameOverBox.setOpacity(0);
-
-        // Création de l'overlay
-        StackPane overlay = new StackPane(gameOverBox);
-        overlay.setAlignment(Pos.CENTER);
-        overlay.setStyle("-fx-background-color: rgba(0,0,0,0.5);");
-        gamePane.getChildren().add(overlay);
-
-        // Animation d'apparition
-        FadeTransition fadeIn = new FadeTransition(Duration.seconds(0.8), gameOverBox);
-        fadeIn.setToValue(1);
-
-        ScaleTransition scaleIn = new ScaleTransition(Duration.seconds(0.5), gameOverBox);
-        scaleIn.setFromX(0.8);
-        scaleIn.setFromY(0.8);
-        scaleIn.setToX(1.0);
-        scaleIn.setToY(1.0);
-
-        ParallelTransition entrance = new ParallelTransition(fadeIn, scaleIn);
-        entrance.play();
-        activeAnimations.add(entrance);
     }
 
     public void checkLaserCollisions(Pane gamePane, Rectangle laser) {
