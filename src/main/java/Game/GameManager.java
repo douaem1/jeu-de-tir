@@ -332,43 +332,6 @@ public class GameManager {
     }
 
 
-    public void handlePlayerHit() {
-        // Vérifier si le joueur est déjà invincible ou n'a plus de vies
-        if (isInvincible || lives <= 0) return;
-
-        // Activer l'invincibilité IMMÉDIATEMENT
-        isInvincible = true;
-
-        // Décrémenter UNE vie seulement
-        lives = Math.max(0, lives - 1);
-        hud.updateLives(lives);
-
-        // ▼▼▼ Combiner clignotement et invincibilité dans UNE animation ▼▼▼
-        Timeline protection = new Timeline(
-                new KeyFrame(Duration.ZERO, new KeyValue(player.opacityProperty(), 0.3)), // Opacité à 30%),
-                new KeyFrame(Duration.millis(150), // Toutes les 150ms
-                        String.valueOf(new KeyFrame(Duration.seconds(1.5), // Durée totale : 1.5 secondes
-                                e -> {
-                                    isInvincible = false; // Désactiver l'invincibilité
-                                    System.out.println("Fin de la protection");
-                                }
-                        ))
-                )
-        );
-
-        // Configurer le clignotement (10 cycles)
-        protection.setCycleCount(10); // 10 × 150ms = 1.5s
-        protection.setAutoReverse(true); // Alternance transparent/visible
-
-        protection.play();
-        activeAnimations.add(protection);
-
-        // ▼▼▼ Vérifier le Game Over APRÈS la mise à jour ▼▼▼
-        if (lives <= 0) {
-            gameRunning = false;
-            gameOver(gamepane);
-        }
-    }
 
     // 1. Ajoutez ces variables pour suivre les vies de chaque joueur
     private int player1Lives = 3;
@@ -406,62 +369,43 @@ public class GameManager {
             }
         }
     }
-    private void handlePlayer1Hit() {
-        player1Lives--;
+    public void handlePlayerHit() {
+        // Vérifier si le joueur est déjà invincible ou n'a plus de vies
+        if (isInvincible || lives <= 0) return;
 
-        // Effet visuel de clignotement
-        ImageView player1View = null;
-        for (Node node : gamepane.getChildren()) {
-            if (node instanceof ImageView && node.getId() != null &&
-                    node.getId().equals("player-player1")) {
-                player1View = (ImageView) node;
-                break;
-            }
+        // Activer l'invincibilité IMMÉDIATEMENT
+        isInvincible = true;
+        System.out.println("Joueur touché! Invincibilité activée.");
+
+        // Décrémenter UNE vie seulement
+        lives = Math.max(0, lives - 1);
+        hud.updateLives(lives);
+
+        // Animation de clignotement pour indiquer visuellement l'invincibilité
+        Timeline blinkAnimation = new Timeline(
+                new KeyFrame(Duration.ZERO, new KeyValue(player.opacityProperty(), 0.3)),
+                new KeyFrame(Duration.millis(150), new KeyValue(player.opacityProperty(), 1.0))
+        );
+        blinkAnimation.setCycleCount(10); // 10 cycles = 1.5 secondes (10 * 150ms)
+        blinkAnimation.setAutoReverse(true);
+        blinkAnimation.play();
+        activeAnimations.add(blinkAnimation);
+
+        // Timer pour désactiver l'invincibilité après 1.5 secondes
+        Timeline invincibilityTimer = new Timeline(
+                new KeyFrame(Duration.seconds(1.5), e -> {
+                    isInvincible = false;
+                    System.out.println("Fin de la protection");
+                })
+        );
+        invincibilityTimer.play();
+        activeAnimations.add(invincibilityTimer);
+
+        // Vérifier le Game Over APRÈS la mise à jour
+        if (lives <= 0) {
+            gameRunning = false;
+            gameOver(gamepane);
         }
-
-        if (player1View != null) {
-            Timeline blink = new Timeline(
-                    new KeyFrame(Duration.ZERO, new KeyValue(player1View.opacityProperty(), 0.3)),
-                    new KeyFrame(Duration.seconds(0.1), new KeyValue(player1View.opacityProperty(), 1.0))
-            );
-            blink.setCycleCount(6);
-            blink.play();
-        }
-
-        // Mise à jour du HUD
-        updateMultiplayerHUD();
-
-        // Vérifier si partie terminée
-        checkGameEndMultiplayer();
-    }
-
-    private void handlePlayer2Hit() {
-        player2Lives--;
-
-        // Effet visuel de clignotement
-        ImageView player2View = null;
-        for (Node node : gamepane.getChildren()) {
-            if (node instanceof ImageView && node.getId() != null &&
-                    node.getId().equals("player-player2")) {
-                player2View = (ImageView) node;
-                break;
-            }
-        }
-
-        if (player2View != null) {
-            Timeline blink = new Timeline(
-                    new KeyFrame(Duration.ZERO, new KeyValue(player2View.opacityProperty(), 0.3)),
-                    new KeyFrame(Duration.seconds(0.1), new KeyValue(player2View.opacityProperty(), 1.0))
-            );
-            blink.setCycleCount(6);
-            blink.play();
-        }
-
-        // Mise à jour du HUD
-        updateMultiplayerHUD();
-
-        // Vérifier si partie terminée
-        checkGameEndMultiplayer();
     }
 
 
@@ -542,13 +486,23 @@ public class GameManager {
         Button restartBtn = animation.createActionButton("PLAY AGAIN", "PRIMARY");
         restartBtn.setPrefWidth(200);
         restartBtn.setOnAction(e -> {
+            stopAllAnimations();
             // Nettoyage complet avant de recommencer
             gamePane.getChildren().clear();
             enemies.clear();
             activeAnimations.clear();
+            playerViews.clear(); // Réinitialiser les vues des joueurs
+            keysPressed.clear();
             score = 0;
             lives = 3;
             gameRunning = true;
+            score = 0;
+            lives = 3;
+            gameRunning = true;
+            isInvincible = false; // Réinitialiser l'état d'invincibilité
+            currentLevel = 1; // Réinitialiser le niveau
+            enemySpeed = 0.5; // Réinitialiser la vitesse des ennemis
+            enemySpeedMultiplier = 1.0;
 
             // Transition fluide
             FadeTransition fadeOut = new FadeTransition(Duration.millis(300), gameOverBox);
@@ -869,9 +823,21 @@ public class GameManager {
         return playerView;
     }
     private void checkPlayerCollision(ImageView enemy) {
-        if (player == null || isInvincible || !gameRunning || lives <= 0) return;
+        // Vérifier d'abord que les conditions de base sont remplies
+        if (player == null || !gameRunning || lives <= 0) return;
+
+        // Vérifier explicitement l'état d'invincibilité pour une meilleure lisibilité
+        if (isInvincible) {
+            // Si le joueur est invincible, on vérifie quand même la collision pour le débogage,
+            // mais on ne déclenche pas handlePlayerHit
+            if (enemy.getBoundsInParent().intersects(player.getBoundsInParent())) {
+                System.out.println("Collision détectée mais joueur invincible - ignorée");
+            }
+            return;
+        }
+
+        // Si on arrive ici, le joueur n'est PAS invincible
         if (enemy.getBoundsInParent().intersects(player.getBoundsInParent())) {
-            System.out.println("Collision unique détectée");
             System.out.println("Collision détectée à: " + System.currentTimeMillis());
             System.out.println("Position joueur: " + player.getBoundsInParent());
             System.out.println("Position ennemi: " + enemy.getBoundsInParent());
@@ -881,6 +847,8 @@ public class GameManager {
                 gamepane.getChildren().remove(enemy);
                 enemies.remove(enemy);
             });
+
+            // Gérer la collision (active l'invincibilité à l'intérieur)
             handlePlayerHit();
         }
     }
@@ -1421,5 +1389,8 @@ public class GameManager {
             showLevelUpNotification();
         }
     }
+
+
+
 
 }
