@@ -25,6 +25,11 @@ public class Player {
         }
     }
 
+    public Player(int i, int i1, String selectedAircraft) {
+        this.selectedAircraft = selectedAircraft;
+
+    }
+
     public void fireEnhancedLaser(Pane gamePane, ImageView player) {
         System.out.println("Tentative de tir: " + (gameManager != null ? "Manager OK" : "Manager NULL"));
 
