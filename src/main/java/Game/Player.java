@@ -112,19 +112,19 @@ public class Player {
     private String getAircraftImagePath(String aircraftName) {
         if (aircraftName == null) {
             System.out.println("Warning: No aircraft selected, using default");
-            return "/airplane.png"; // Default aircraft
+            return "/Spaceship_02_ORANGE.png"; // Default aircraft
         }
 
         switch (aircraftName) {
             case "F-22 Raptor":
-                return "/avion1.png";
+                return "/Spaceship_04_RED.png";
             case "Eurofighter Typhoon":
-                return "/avion2.png";
+                return "/Spaceship_05_BLUE.png";
             case "Sukhoi Su-57":
-                return "/airplane.png";
+                return "/Spaceship_02_ORANGE.png";
             default:
                 System.out.println("Unknown aircraft: " + aircraftName + ", using default");
-                return "/airplane.png";  // Option par défaut
+                return "/Spaceship_02_ORANGE.png";  // Option par défaut
         }
     }
 }

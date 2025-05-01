@@ -6,7 +6,7 @@ import java.io.*;
 
 //listening to clients who wish to connect and when they do it will spawn a new thread to handle them
 //each object of this class will be responsible for communicating with a client
-//the client class will implement the interface runnable(each instance of this class will be excecuted by a separate thread)
+//the clientHandler class will implement the interface runnable(each instance of this class will be excecuted by a separate thread)
 public class Serveur {
 
     private ServerSocket serverSocket;//this object will be responsible for listening for incoming cnxs(clients)and creating a socket object to communicate with them

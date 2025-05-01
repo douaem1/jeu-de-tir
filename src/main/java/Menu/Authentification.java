@@ -206,8 +206,6 @@ public class Authentification {
             MenuManager menuManager = new MenuManager(primaryStage);
             if (isValid) {
                 menuManager.showNotification("Sign in successful!");
-                PlayerSelectionInterface selectionInterface = new PlayerSelectionInterface(primaryStage);
-                selectionInterface.showSelectionInterface();
             } else {
                 menuManager.showNotification("Incorrect username or password or inexistant account (Sign up first)");
             }
@@ -290,8 +288,6 @@ public class Authentification {
                 newUser.addUser(newUser);
 
                 menuManager.showNotification("Account created successfully!");
-                PlayerSelectionInterface selectionInterface = new PlayerSelectionInterface(primaryStage);
-                selectionInterface.showSelectionInterface();
             }
         });
 
