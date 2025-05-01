@@ -369,44 +369,6 @@ public class GameManager {
             }
         }
     }
-    public void handlePlayerHit() {
-        // Vérifier si le joueur est déjà invincible ou n'a plus de vies
-        if (isInvincible || lives <= 0) return;
-
-        // Activer l'invincibilité IMMÉDIATEMENT
-        isInvincible = true;
-        System.out.println("Joueur touché! Invincibilité activée.");
-
-        // Décrémenter UNE vie seulement
-        lives = Math.max(0, lives - 1);
-        hud.updateLives(lives);
-
-        // Animation de clignotement pour indiquer visuellement l'invincibilité
-        Timeline blinkAnimation = new Timeline(
-                new KeyFrame(Duration.ZERO, new KeyValue(player.opacityProperty(), 0.3)),
-                new KeyFrame(Duration.millis(150), new KeyValue(player.opacityProperty(), 1.0))
-        );
-        blinkAnimation.setCycleCount(10); // 10 cycles = 1.5 secondes (10 * 150ms)
-        blinkAnimation.setAutoReverse(true);
-        blinkAnimation.play();
-        activeAnimations.add(blinkAnimation);
-
-        // Timer pour désactiver l'invincibilité après 1.5 secondes
-        Timeline invincibilityTimer = new Timeline(
-                new KeyFrame(Duration.seconds(1.5), e -> {
-                    isInvincible = false;
-                    System.out.println("Fin de la protection");
-                })
-        );
-        invincibilityTimer.play();
-        activeAnimations.add(invincibilityTimer);
-
-        // Vérifier le Game Over APRÈS la mise à jour
-        if (lives <= 0) {
-            gameRunning = false;
-            gameOver(gamepane);
-        }
-    }
 
 
     // 6. Mise à jour du HUD pour le mode multijoueur
@@ -769,90 +731,54 @@ public class GameManager {
     /**
      * Met à jour les données des joueurs reçues du serveur
      */
-    private ImageView findOrCreatePlayerView(String username, String aircraftType) {
-        // Ne pas recréer notre propre joueur qui est déjà géré
-        if (username.equals(currentUsername) && player != null) {
-            return player;
-        }
 
-        // Chercher s'il existe déjà un avion pour ce joueur
-        for (Node node : gamepane.getChildren()) {
-            if (node instanceof ImageView && node.getId() != null &&
-                    node.getId().equals("player-" + username)) {
-                return (ImageView)node;
-            }
-        }
-
-        // Si non, créer un nouvel avion
-        ImageView playerView = new ImageView();
-
-        // Charger l'image correspondant au type d'avion
-        if (aircraftImages.containsKey(aircraftType)) {
-            playerView.setImage(aircraftImages.get(aircraftType));
-        } else {
-            // Image par défaut si le type n'existe pas
-            playerView.setImage(aircraftImages.get("default"));
-        }
-
-        // Définir l'ID pour pouvoir retrouver ce joueur plus tard
-        playerView.setId("player-" + username);
-
-        // Définir la taille
-        playerView.setFitWidth(PLAYER_WIDTH);
-        playerView.setFitHeight(PLAYER_HEIGHT);
-
-        // Ajouter des effets visuels pour distinguer les joueurs
-        ColorAdjust colorAdjust = new ColorAdjust();
-        colorAdjust.setHue(0.2); // Teinte rouge pour les autres joueurs
-        playerView.setEffect(colorAdjust);
-
-        // Ajouter un nom au-dessus de l'avion
-        Label nameLabel = new Label(username);
-        nameLabel.setStyle("-fx-background-color: rgba(0,0,0,0.5); -fx-text-fill: white; -fx-padding: 3px;");
-        nameLabel.setTranslateY(-20); // Positionner au-dessus de l'avion
-
-        // Créer un conteneur pour l'avion et son nom
-        StackPane playerContainer = new StackPane();
-        playerContainer.getChildren().addAll(playerView, nameLabel);
-        StackPane.setAlignment(nameLabel, Pos.TOP_CENTER);
-
-        // Ajouter au pane
-        gamepane.getChildren().add(playerView);
-
-        System.out.println("Nouveau joueur créé: " + username + " avec l'avion " + aircraftType);
-        return playerView;
-    }
-    private void checkPlayerCollision(ImageView enemy) {
-        // Vérifier d'abord que les conditions de base sont remplies
+    public void checkPlayerCollision(ImageView enemy) {
+        // 1) Conditions de base
         if (player == null || !gameRunning || lives <= 0) return;
 
-        // Vérifier explicitement l'état d'invincibilité pour une meilleure lisibilité
-        if (isInvincible) {
-            // Si le joueur est invincible, on vérifie quand même la collision pour le débogage,
-            // mais on ne déclenche pas handlePlayerHit
-            if (enemy.getBoundsInParent().intersects(player.getBoundsInParent())) {
-                System.out.println("Collision détectée mais joueur invincible - ignorée");
-            }
-            return;
-        }
+        // 2) Si invincible, on ignore
+        if (isInvincible) return;
 
-        // Si on arrive ici, le joueur n'est PAS invincible
+        // 3) Collision ?
         if (enemy.getBoundsInParent().intersects(player.getBoundsInParent())) {
-            System.out.println("Collision détectée à: " + System.currentTimeMillis());
-            System.out.println("Position joueur: " + player.getBoundsInParent());
-            System.out.println("Position ennemi: " + enemy.getBoundsInParent());
+            // 3a) Active INVINCIBILITÉ tout de suite
+            isInvincible = true;
 
-            // Suppression IMMÉDIATE et SYNCHRONE de l'ennemi
-            Platform.runLater(() -> {
-                gamepane.getChildren().remove(enemy);
-                enemies.remove(enemy);
-            });
+            // 3b) Retire l'ennemi immédiatement
+            gamepane.getChildren().remove(enemy);
+            enemies.remove(enemy);
 
-            // Gérer la collision (active l'invincibilité à l'intérieur)
+            // 3c) Gère le hit (diminution de vie, animation, temporisation)
             handlePlayerHit();
         }
     }
 
+    public void handlePlayerHit() {
+        // 1) Retire UNE vie
+        lives = Math.max(0, lives - 1);
+        hud.updateLives(lives);
+        System.out.println("Player hit! Lives left: " + lives);
+
+        // 2) Animation de clignotement (1.5 s) ET fin de l’invincibilité dans onFinished
+        Timeline blink = new Timeline(
+                new KeyFrame(Duration.ZERO,    new KeyValue(player.opacityProperty(), 0.3)),
+                new KeyFrame(Duration.millis(150), new KeyValue(player.opacityProperty(), 1.0))
+        );
+        blink.setCycleCount(10); // 10 × 150 ms = 1.5 s
+        blink.setAutoReverse(true);
+        blink.setOnFinished(e -> {
+            isInvincible = false;
+            System.out.println("Invincibility ended");
+        });
+        blink.play();
+        activeAnimations.add(blink);
+
+        // 3) Vérifie Game Over
+        if (lives <= 0) {
+            gameRunning = false;
+            gameOver(gamepane);
+        }
+    }
     public void animateEnemy(ImageView enemy) {
         Timeline animation = new Timeline(
                 new KeyFrame(Duration.millis(8), e -> {
@@ -1389,8 +1315,72 @@ public class GameManager {
             showLevelUpNotification();
         }
     }
+    public void startFriendlyMultiplayerMode(String selectedAircraft) {
+        this.selectedAircraft = selectedAircraft;
+        this.isMultiplayerMode = true;
 
+        Platform.runLater(() -> {
+            try {
+                // Réinitialiser l'état du jeu
+                gamepane = new Pane();
+                gameRunning = true;
+                enemies.clear();
+                playerViews.clear();
+                activeAnimations.forEach(Animation::stop);
+                activeAnimations.clear();
+                score = 0;
+                lives = 3;
+                startTime = System.currentTimeMillis();
 
+                // Setup de base
+                design designHelper = new design();
+                ImageView background = designHelper.loadBestBackground();
+                gamepane.getChildren().add(background);
+
+                // Créer le joueur principal
+                Player playerClass = new Player(this);
+                player = playerClass.createPlayer();
+                gamepane.getChildren().add(player);
+
+                // Initialiser le HUD
+                hud = new HUD(this);
+                hud.setupHUD();
+                scoreLabel = hud.scoreLabel;
+                gamepane.getChildren().add(hud.hudContainer);
+
+                // Ajouter le joueur à la liste des vues
+                playerViews.put(currentUsername, player);
+
+                // Setup des contrôles
+                setupControls();
+
+                // Créer la scène
+                Scene gameScene = new Scene(gamepane, WINDOW_WIDTH, WINDOW_HEIGHT);
+                primaryStage.setScene(gameScene);
+                gamepane.requestFocus();
+
+                // Démarrer le jeu (sans les ennemis)
+                startGameThreads();
+                currentLevel = 1;
+                hud.updateLevel(currentLevel);
+
+                // Notifier le serveur de notre présence dans ce mode spécial
+                if (out != null) {
+                    out.println("FRIENDLY_MODE_JOIN:" + currentUsername + "," + selectedAircraft);
+                    out.flush();
+
+                    // Ajouter une notification spéciale pour ce mode
+                    showNotification("Mode multijoueur entre amis actif! Pas d'ennemis, juste du fun!", 3000);
+                }
+
+                System.out.println("Friendly multiplayer mode started successfully");
+            } catch (Exception e) {
+                e.printStackTrace();
+                System.err.println("Critical error launching friendly multiplayer mode: " + e.getMessage());
+                setupMainMenu();
+            }
+        });
+    }
 
 
 }

@@ -56,6 +56,8 @@ public class GameState {
 
     // Ajouter un nouveau joueur
     public void addPlayer(String username) {
+
+
         // Positionner le joueur à un endroit aléatoire mais sécurisé (éviter les bords)
         int x = random.nextInt(GAME_WIDTH - 100) + 50;
         int y = GAME_HEIGHT - 100; // Commencer en bas de l'écran
