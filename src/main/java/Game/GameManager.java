@@ -733,26 +733,60 @@ public class GameManager {
      */
 
     public void checkPlayerCollision(ImageView enemy) {
-        // 1) Conditions de base
+        // 1) Basic conditions
         if (player == null || !gameRunning || lives <= 0) return;
 
-        // 2) Si invincible, on ignore
+        // 2) Skip if player is invincible
         if (isInvincible) return;
 
-        // 3) Collision ?
-        if (enemy.getBoundsInParent().intersects(player.getBoundsInParent())) {
-            // 3a) Active INVINCIBILITÉ tout de suite
+        // 3) Use more precise collision detection with smaller bounds
+        // Create reduced bounding boxes for more accurate collision detection
+        Bounds playerBounds = player.getBoundsInParent();
+        Bounds enemyBounds = enemy.getBoundsInParent();
+
+        // Reduce collision area by 20% for more precise detection
+        double playerShrinkX = playerBounds.getWidth() * 0.2;
+        double playerShrinkY = playerBounds.getHeight() * 0.2;
+        double enemyShrinkX = enemyBounds.getWidth() * 0.2;
+        double enemyShrinkY = enemyBounds.getHeight() * 0.2;
+
+        // Create adjusted bounds
+        Bounds adjustedPlayerBounds = new BoundingBox(
+                playerBounds.getMinX() + playerShrinkX,
+                playerBounds.getMinY() + playerShrinkY,
+                playerBounds.getWidth() - (playerShrinkX * 2),
+                playerBounds.getHeight() - (playerShrinkY * 2)
+        );
+
+        Bounds adjustedEnemyBounds = new BoundingBox(
+                enemyBounds.getMinX() + enemyShrinkX,
+                enemyBounds.getMinY() + enemyShrinkY,
+                enemyBounds.getWidth() - (enemyShrinkX * 2),
+                enemyBounds.getHeight() - (enemyShrinkY * 2)
+        );
+
+        // Check if the adjusted bounds intersect
+        if (adjustedPlayerBounds.intersects(adjustedEnemyBounds)) {
+            // Debug output
+            System.out.println("Real collision detected between player and enemy!");
+
+            // Set invincibility immediately
             isInvincible = true;
 
-            // 3b) Retire l'ennemi immédiatement
-            gamepane.getChildren().remove(enemy);
-            enemies.remove(enemy);
+            // Remove enemy
+            Platform.runLater(() -> {
+                if (gamepane != null && gamepane.getChildren().contains(enemy)) {
+                    gamepane.getChildren().remove(enemy);
+                    enemies.remove(enemy);
+                    createExplosion(enemy.getX() + enemy.getFitWidth()/2,
+                            enemy.getY() + enemy.getFitHeight()/2);
+                }
+            });
 
-            // 3c) Gère le hit (diminution de vie, animation, temporisation)
+            // Handle player hit
             handlePlayerHit();
         }
     }
-
     public void handlePlayerHit() {
         // 1) Retire UNE vie
         lives = Math.max(0, lives - 1);
