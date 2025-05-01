@@ -120,6 +120,12 @@ public class MenuManager {
             try {
                 // Animation de bouton
                 animation.playButtonPressAnimation(startBtn);
+                PlayerSelectionInterface selectionInterface = new PlayerSelectionInterface(primaryStage);
+
+                // We need to pass the GameManager to the selection interface
+                // so that when aircraft is selected, it can properly start the game
+                selectionInterface.setGameManager(gamemanager);
+                selectionInterface.showSelectionInterface();
 
                 // Créer d'abord un écran de chargement simple
                 StackPane loadingPane = new StackPane();
@@ -140,7 +146,7 @@ public class MenuManager {
                     // S'assurer que nous avons un nouveau GameManager
                     gamemanager = new GameManager();
                     gamemanager.setPrimaryStage(primaryStage);
-                    gamemanager.startGame();
+                    gamemanager.startGame(gamemanager.selelectedAircraft);
                 });
             } catch (Exception ex) {
                 System.err.println("Erreur lors du démarrage du jeu: " + ex.getMessage());
@@ -256,4 +262,5 @@ public class MenuManager {
         gamemanager.stopGame();
         gamemanager.setupMainMenu();
     }
+
 }

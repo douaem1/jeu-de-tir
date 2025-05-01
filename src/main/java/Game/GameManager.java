@@ -22,10 +22,19 @@ import design.*;
 import Menu.MenuManager;
 import Menu.Authentification;
 
+
 public class GameManager {
+    private boolean isInvincible = false;
+    public String selelectedAircraft;
+    public int scoreMultiplier = 1;
+    public int currentLevel = 1;
+    private final int[] LEVEL_SCORE_THRESHOLDS = {60, 100, 160, 220, 290, 350}; // Scores pour débloquer les niveaux
+    public double enemySpeed = 0.5; // Vitesse de base
+    public double enemySpeedMultiplier = 1.0; // Nouvelle variable
+    public int enemiesPerWave = 1;  // Nombre d'ennemis par vague
     public Stage primaryStage;
-    private MenuManager menuManager;
-    private Authentification auth;
+    public MenuManager menuManager;
+    public Authentification auth;
 
     // Configuration
     public static final int WINDOW_WIDTH = 1200;
@@ -84,7 +93,7 @@ public class GameManager {
         this.primaryStage = primaryStage;
     }
 
-    public  void setupMainMenu() {
+    public void setupMainMenu() {
         try {
             // Création d'un nouveau root
             StackPane root = new StackPane();
@@ -119,17 +128,19 @@ public class GameManager {
             e.printStackTrace();
         }
     }
+
     public HUD hud;
 
     public void setupHUD() {
-        hud = new HUD();
+        hud = new HUD(this);
         hud.setupHUD();
         gamepane.getChildren().add(hud.hudContainer);
     }
 
     // In GameManager.java, modify the startGame method:
 // Dans le GameManager, remplacez la méthode startGame() comme ceci:
-    public void startGame() {
+    public void startGame(String selectedAircraft) {
+        this.selelectedAircraft = selectedAircraft;
         Platform.runLater(() -> {
             try {
                 // Réinitialiser l'état du jeu
@@ -171,6 +182,8 @@ public class GameManager {
                 // Démarrer le jeu
                 setupEnemySpawning();
                 startGameThreads();
+                currentLevel = 1;  // Réinitialisez le niveau
+                hud.updateLevel(currentLevel);  // Mettez à jour l'affichage
 
                 System.out.println("Game started successfully");
             } catch (Exception e) {
@@ -179,19 +192,21 @@ public class GameManager {
                 setupMainMenu();
             }
         });
+
     }
+
     // Et remplacez la méthode setupControls() comme ceci:
     public void setupControls() {
         gamepane.setFocusTraversable(true);
         gamepane.requestFocus();
 
         // Création d'une instance de Player unique pour gérer les tirs
-        Player playerInstance = new Player(this);  // Passer THIS comme référence
+        Player playerClass = new Player(this); // Passer THIS comme référence
 
         gamepane.setOnKeyPressed(e -> {
             if (!gameRunning) return;
 
-            double speed = 8;
+            double speed = 14;
             switch (e.getCode()) {
                 case LEFT:
                     player.setX(Math.max(0, player.getX() - speed));
@@ -208,7 +223,7 @@ public class GameManager {
                 case SPACE:
                     System.out.println("Space key pressed - firing laser");
                     // Appelle la méthode de tir sans le hud (qui n'est pas nécessaire)
-                    playerInstance.fireEnhancedLaser(gamepane, player);
+                    playerClass.fireEnhancedLaser(gamepane, player);
                     break;
                 case ESCAPE:
                     stopGame();
@@ -225,15 +240,25 @@ public class GameManager {
                 new KeyFrame(Duration.seconds(2), event -> {
                     if (!gameRunning) return;
 
-                    Enemy enemy1 = new Enemy();
-                    ImageView enemy = enemy1.createEnemyAirplane();
-                    if (gamepane != null && enemy != null) {
-                        // Add CSS class for identification
-                        enemy.getStyleClass().add("enemy-ship");
+                    for (int i = 0; i < enemiesPerWave; i++) { // <-- Spawn multiple
+                        Enemy enemy1 = new Enemy(this);
+                        ImageView enemy = enemy1.createEnemyAirplane();
+                        if (gamepane != null && enemy != null) {
+                            // Add CSS class for identification
+                            enemy.getStyleClass().add("enemy-ship");
 
-                        gamepane.getChildren().add(enemy);
-                        enemies.add(enemy);
-                        animateEnemy(enemy);
+                            gamepane.getChildren().add(enemy);
+                            enemies.add(enemy);
+                            animateEnemy(enemy);
+                        }
+                    }
+                    // Ennemis tireurs à partir du niveau 5
+                    if (currentLevel >= 5 && Math.random() < 0.3) { // 30% de chance de spawn
+                        ShooterEnemy shooter = new ShooterEnemy(this);
+                        ImageView shooterEnemy = shooter.getEnemy();
+                        gamepane.getChildren().add(shooterEnemy);
+                        enemies.add(shooterEnemy);
+                        animateEnemy(shooterEnemy);
                     }
                 }
                 ));
@@ -241,19 +266,20 @@ public class GameManager {
         enemySpawner.play();
         activeAnimations.add(enemySpawner);
     }
+
     public void animateEnemy(ImageView enemy) {
         Timeline animation = new Timeline(
                 new KeyFrame(Duration.millis(8), e -> {
-                    if (!gameRunning) return;
+                    if (!gameRunning ) return;
 
-                    enemy.setY(enemy.getY() + 0.5);
+                    enemy.setY(enemy.getY() + (enemySpeed * enemySpeedMultiplier));
                     if (enemy.getY() > WINDOW_HEIGHT) {
-                        Platform.runLater(() -> {
-                            if (gamepane != null && gamepane.getChildren().contains(enemy)) {
-                                gamepane.getChildren().remove(enemy);
+                      //  Platform.runLater(() -> {
+                       //     if (gamepane != null && gamepane.getChildren().contains(enemy)) {
+                       //         gamepane.getChildren().remove(enemy);
                                 enemies.remove(enemy);
-                            }
-                        });
+                      //      }
+                      //  });
                     } else {
                         checkPlayerCollision(enemy);
                     }
@@ -265,39 +291,69 @@ public class GameManager {
     }
 
     private void checkPlayerCollision(ImageView enemy) {
-        if (player != null && enemy.getBoundsInParent().intersects(player.getBoundsInParent())) {
-            handlePlayerHit();
+        if (player == null || isInvincible || !gameRunning || lives <= 0) return;
+        if (enemy.getBoundsInParent().intersects(player.getBoundsInParent())) {
+            System.out.println("Collision unique détectée");
+            System.out.println("Collision détectée à: " + System.currentTimeMillis());
+            System.out.println("Position joueur: " + player.getBoundsInParent());
+            System.out.println("Position ennemi: " + enemy.getBoundsInParent());
+
+            // Suppression IMMÉDIATE et SYNCHRONE de l'ennemi
             Platform.runLater(() -> {
-                if (gamepane != null && gamepane.getChildren().contains(enemy)) {
-                    gamepane.getChildren().remove(enemy);
-                    enemies.remove(enemy);
-                }
+                gamepane.getChildren().remove(enemy);
+                enemies.remove(enemy);
             });
+            handlePlayerHit();
         }
     }
 
-    private void handlePlayerHit() {
-        lives--;
-        HUD hud = new HUD();
-        hud.updateHUD();
+    public void handlePlayerHit() {
+        // Vérifier si le joueur est déjà invincible ou n'a plus de vies
+        if (isInvincible || lives <= 0) return;
 
+        // Activer l'invincibilité IMMÉDIATEMENT
+        isInvincible = true;
+
+        // Décrémenter UNE vie seulement
+        lives = Math.max(0, lives - 1);
+        hud.updateLives(lives);
+
+        // ▼▼▼ Combiner clignotement et invincibilité dans UNE animation ▼▼▼
+        Timeline protection = new Timeline(
+                new KeyFrame(Duration.ZERO, new KeyValue(player.opacityProperty(), 0.3)), // Opacité à 30%),
+                new KeyFrame(Duration.millis(150), // Toutes les 150ms
+                        String.valueOf(new KeyFrame(Duration.seconds(1.5), // Durée totale : 1.5 secondes
+                                e -> {
+                                    isInvincible = false; // Désactiver l'invincibilité
+                                    System.out.println("Fin de la protection");
+                                }
+                        ))
+                )
+        );
+
+        // Configurer le clignotement (10 cycles)
+        protection.setCycleCount(10); // 10 × 150ms = 1.5s
+        protection.setAutoReverse(true); // Alternance transparent/visible
+
+        protection.play();
+        activeAnimations.add(protection);
+
+        // ▼▼▼ Vérifier le Game Over APRÈS la mise à jour ▼▼▼
         if (lives <= 0) {
+            gameRunning = false;
             gameOver(gamepane);
-        } else {
-            Timeline blink = new Timeline(
-                    new KeyFrame(Duration.ZERO, new KeyValue(player.opacityProperty(), 0.3)),
-                    new KeyFrame(Duration.seconds(0.1), new KeyValue(player.opacityProperty(), 1.0))
-            );
-            blink.setCycleCount(6);
-            blink.play();
         }
     }
 
     private void gameOver(Pane gamePane) {
         gameRunning = false;
-        design design = new design();
-        animation animation = new animation();
         stopAllAnimations();
+
+        // ▼▼▼ Nettoyage des ennemis ▼▼▼
+        Platform.runLater(() -> {
+            gamePane.getChildren().removeAll(enemies);
+            enemies.clear();
+        });
 
         // Création du conteneur Game Over
         VBox gameOverBox = new VBox(20);
@@ -316,6 +372,7 @@ public class GameManager {
         scoreLabel.setTextFill(COLORS.get("LIGHT"));
 
         // Bouton Play Again
+        animation animation = new animation();
         Button restartBtn = animation.createActionButton("PLAY AGAIN", "PRIMARY");
         restartBtn.setPrefWidth(200);
         restartBtn.setOnAction(e -> {
@@ -332,7 +389,7 @@ public class GameManager {
             fadeOut.setFromValue(1.0);
             fadeOut.setToValue(0.0);
             fadeOut.setOnFinished(event -> {
-                startGame();
+                startGame(selelectedAircraft);
             });
             fadeOut.play();
         });
@@ -388,14 +445,17 @@ public class GameManager {
             if (laser.getBoundsInParent().intersects(enemy.getBoundsInParent())) {
                 Platform.runLater(() -> {
                     gamePane.getChildren().removeAll(laser, enemy);
-                    createExplosion(enemy.getX() + enemy.getFitWidth()/2,
-                            enemy.getY() + enemy.getFitHeight()/2);
+                    createExplosion(enemy.getX() + enemy.getFitWidth() / 2,
+                            enemy.getY() + enemy.getFitHeight() / 2);
 
                     // Mettre à jour le score
-                    score += 10;
+                    score += 10 * scoreMultiplier;
                     if (scoreLabel != null) {
                         scoreLabel.setText("SCORE: " + score);
                     }
+
+                    // Vérifier si on change de niveau
+                    checkLevelUp();
                 });
                 return true;
             }
@@ -405,10 +465,11 @@ public class GameManager {
 
     public void updateGameState() {
         try {
-            Enemy enemy = new Enemy();
+            Enemy enemy = new Enemy(this);
             enemy.updateEnemies();
-            HUD hud = new HUD();
-            hud.updateHUD();
+            if (hud != null) {
+                hud.updateHUD();
+            }
         } catch (Exception e) {
             System.err.println("Erreur dans updateGameState: " + e.getMessage());
         }
@@ -421,6 +482,7 @@ public class GameManager {
             }
         }
         activeAnimations.clear();
+        enemies.clear();
     }
 
     public void stopGame() {
@@ -452,9 +514,13 @@ public class GameManager {
         );
         timeline.setOnFinished(e -> gamepane.getChildren().remove(explosion));
         timeline.play();
+        if (new Random().nextDouble() < 0.3) {
+            spawnPowerUp(x, y);
+        }
     }
 
     public void startGameThreads() {
+
         // S'assurer que l'exécuteur n'est pas déjà fermé
         if (gameExecutor.isShutdown()) {
             gameExecutor = Executors.newFixedThreadPool(3);
@@ -474,4 +540,94 @@ public class GameManager {
             }
         });
     }
+
+    // Méthode pour vérifier si le niveau doit changer
+    private void checkLevelUp() {
+        if (currentLevel <= LEVEL_SCORE_THRESHOLDS.length &&
+                score >= LEVEL_SCORE_THRESHOLDS[currentLevel - 1]) {
+
+            currentLevel++;
+            increaseDifficulty();
+            hud.updateLevel(currentLevel);
+            showLevelUpNotification();
+        }
+    }
+
+    // Augmente la difficulté
+    private void increaseDifficulty() {
+        if (currentLevel < 5) {
+            enemySpeed *= 1.2; // +20% de vitesse
+        }
+        if (currentLevel < 4) {
+            enemiesPerWave++;   // +1 ennemi par vague
+        }
+        System.out.println("Niveau " + currentLevel + " - Vitesse: " + enemySpeed);
+    }
+
+    // Affiche une notification de changement de niveau
+    private void showLevelUpNotification() {
+        Label notification = new Label("NIVEAU " + currentLevel + " !");
+        notification.setStyle("-fx-font-size: 40; -fx-text-fill: white; -fx-effect: dropshadow(three-pass-box, red, 10, 0.5, 0, 0);");
+        notification.setLayoutX(WINDOW_WIDTH / 2 - 100);
+        notification.setLayoutY(WINDOW_HEIGHT / 2 - 50);
+        gamepane.getChildren().add(notification);
+
+        // Animation de disparition
+        FadeTransition fade = new FadeTransition(Duration.seconds(2), notification);
+        fade.setFromValue(1.0);
+        fade.setToValue(0.0);
+        fade.setOnFinished(e -> gamepane.getChildren().remove(notification));
+        fade.play();
+    }
+
+    //cette méthode pour générer des power-ups
+    private void spawnPowerUp(double x, double y) {
+        if (new Random().nextDouble() < 0.3) {// 30% de chance de spawn
+            GameManager gameManager = new GameManager();
+            gameManager.slowEnemiesTemporarily(5); // Ralentit pendant 5 secondes
+
+            PowerUp powerUp = new PowerUp(this, x, y);
+            gamepane.getChildren().add(powerUp.getView());
+            powerUp.animate();
+        }
+    }
+    // ▼▼▼ Méthode mise à jour pour ralentir au lieu d'arrêter ▼▼▼
+    public void slowEnemiesTemporarily(int seconds) {
+        enemySpeedMultiplier = 0.3; // Réduit la vitesse à 30%
+
+        // ▼▼▼ Animation visuelle du ralentissement ▼▼▼
+        Label effectLabel = new Label("ENNEMIS RALENTIS!");
+        effectLabel.setStyle("-fx-font-size: 24; -fx-text-fill: white; -fx-effect: dropshadow(three-pass-box, blue, 10, 0.5, 0, 0);");
+        effectLabel.setLayoutX(WINDOW_WIDTH / 2 - 100);
+        effectLabel.setLayoutY(100);
+        gamepane.getChildren().add(effectLabel);
+
+        FadeTransition fade = new FadeTransition(Duration.seconds(2), effectLabel);
+        fade.setFromValue(1.0);
+        fade.setToValue(0.0);
+        fade.setOnFinished(e -> gamepane.getChildren().remove(effectLabel));
+        fade.play();
+
+        // ▼▼▼ Réinitialisation après 'seconds' secondes ▼▼▼
+        Timeline slowTimer = new Timeline(
+                new KeyFrame(Duration.seconds(seconds), e -> {
+                    enemySpeedMultiplier = 1.0; // Rétablir la vitesse normale
+
+                    Label endLabel = new Label("LES ENNEMIS REPRENNENT LEUR VITESSE!");
+                    endLabel.setStyle("-fx-font-size: 16; -fx-text-fill: white; -fx-effect: dropshadow(three-pass-box, red, 5, 0.5, 0, 0);");
+                    endLabel.setLayoutX(WINDOW_WIDTH / 2 - 150);
+                    endLabel.setLayoutY(100);
+                    gamepane.getChildren().add(endLabel);
+
+                    FadeTransition fadeOut = new FadeTransition(Duration.seconds(2), endLabel);
+                    fadeOut.setFromValue(1.0);
+                    fadeOut.setToValue(0.0);
+                    fadeOut.setOnFinished(ev -> gamepane.getChildren().remove(endLabel));
+                    fadeOut.play();
+                })
+        );
+        slowTimer.play();
+        activeAnimations.add(slowTimer);
+    }
+
 }
