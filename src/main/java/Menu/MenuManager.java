@@ -14,7 +14,6 @@ import javafx.scene.effect.DropShadow;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
-import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
@@ -114,44 +113,26 @@ public class MenuManager {
         signInBtn.setMaxWidth(Double.MAX_VALUE);
         quitBtn.setMaxWidth(Double.MAX_VALUE);
 
-        // Utiliser une approche directe pour "START AS A GUEST"
+        // Corrected implementation for "START AS A GUEST"
         startBtn.setOnAction(e -> {
             System.out.println("Bouton START AS A GUEST cliqué");
             try {
                 // Animation de bouton
                 animation.playButtonPressAnimation(startBtn);
+
+                // Create and show the player selection interface
                 PlayerSelectionInterface selectionInterface = new PlayerSelectionInterface(primaryStage);
 
                 // We need to pass the GameManager to the selection interface
                 // so that when aircraft is selected, it can properly start the game
                 selectionInterface.setGameManager(gamemanager);
+
+                // Show the selection interface - this will let the player choose aircraft and difficulty
                 selectionInterface.showSelectionInterface();
-
-                // Créer d'abord un écran de chargement simple
-                StackPane loadingPane = new StackPane();
-                loadingPane.setStyle("-fx-background-color: black;");
-
-                Label loadingLabel = new Label("CHARGEMENT...");
-                loadingLabel.setFont(Font.font(gamemanager.FONT_FAMILIES[0], FontWeight.BOLD, 36));
-                loadingLabel.setTextFill(Color.WHITE);
-
-                loadingPane.getChildren().add(loadingLabel);
-
-                // Appliquer l'écran de chargement
-                Scene loadingScene = new Scene(loadingPane, GameManager.WINDOW_WIDTH, GameManager.WINDOW_HEIGHT);
-                primaryStage.setScene(loadingScene);
-
-                // Lancer le jeu après un court délai pour s'assurer que l'écran de chargement s'affiche
-                Platform.runLater(() -> {
-                    // S'assurer que nous avons un nouveau GameManager
-                    gamemanager = new GameManager();
-                    gamemanager.setPrimaryStage(primaryStage);
-                    gamemanager.startGame(gamemanager.selelectedAircraft);
-                });
             } catch (Exception ex) {
-                System.err.println("Erreur lors du démarrage du jeu: " + ex.getMessage());
+                System.err.println("Erreur lors de l'affichage de l'interface de sélection: " + ex.getMessage());
                 ex.printStackTrace();
-                showNotification("Erreur de chargement du jeu");
+                showNotification("Erreur de chargement de l'interface");
             }
         });
 
@@ -262,5 +243,4 @@ public class MenuManager {
         gamemanager.stopGame();
         gamemanager.setupMainMenu();
     }
-
 }

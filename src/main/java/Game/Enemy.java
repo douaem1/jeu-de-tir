@@ -53,7 +53,7 @@ public class Enemy {
 
     // ========================= GRAPHIQUES =========================
 
-   public void spawnEnemy() {
+    public void spawnEnemy() {
         try {
             Image image = new Image(getClass().getResourceAsStream("/enemy.png"));
             ImageView enemy = new ImageView(image);

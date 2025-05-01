@@ -1,3 +1,4 @@
+
 package design;
 
 import Game.GameManager;
@@ -81,8 +82,8 @@ public class HUD {
     public void updateLives(int newLives) {
         Platform.runLater(() -> {
             if (livesLabel != null) {
-            // Format simple et direct
-            livesLabel.setText("VIES: " + newLives);
+                // Format simple et direct
+                livesLabel.setText("VIES: " + newLives);
 
                 // Animation optionnelle mais contrôlée
                 try {
