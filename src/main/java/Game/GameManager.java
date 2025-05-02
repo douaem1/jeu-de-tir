@@ -813,148 +813,6 @@ public class GameManager {
     /**
      * Méthode de détection de collision avec protection contre les déclenchements multiples
      */
-    public void checkPlayerCollision(ImageView enemy) {
-        // Vérifications de base
-        if (player == null || !gameRunning || lives <= 0 || enemy == null) {
-            return;
-        }
-
-        // Obtenir un ID unique pour cet ennemi
-        int enemyId = System.identityHashCode(enemy);
-
-        // Si cet ennemi a déjà causé un hit, l'ignorer complètement
-        if (hitEnemies.contains(enemyId)) {
-            return;
-        }
-
-        // Vérifier le temps écoulé depuis le dernier hit (protection forte)
-        long currentTime = System.currentTimeMillis();
-        if (currentTime - lastHitTime < MIN_TIME_BETWEEN_HITS) {
-            // Trop tôt pour un autre hit, ignorer cette collision
-            return;
-        }
-
-        // Si le joueur est invincible, ignorer la collision
-        if (isInvincible) {
-            return;
-        }
-
-        // Vérifier la collision avec une zone réduite
-        Bounds playerBounds = player.getBoundsInParent();
-        Bounds enemyBounds = enemy.getBoundsInParent();
-
-        double playerShrinkX = playerBounds.getWidth() * 0.25;
-        double playerShrinkY = playerBounds.getHeight() * 0.25;
-        double enemyShrinkX = enemyBounds.getWidth() * 0.25;
-        double enemyShrinkY = enemyBounds.getHeight() * 0.25;
-
-        Bounds adjustedPlayerBounds = new BoundingBox(
-                playerBounds.getMinX() + playerShrinkX,
-                playerBounds.getMinY() + playerShrinkY,
-                playerBounds.getWidth() - (playerShrinkX * 2),
-                playerBounds.getHeight() - (playerShrinkY * 2)
-        );
-
-        Bounds adjustedEnemyBounds = new BoundingBox(
-                enemyBounds.getMinX() + enemyShrinkX,
-                enemyBounds.getMinY() + enemyShrinkY,
-                enemyBounds.getWidth() - (enemyShrinkX * 2),
-                enemyBounds.getHeight() - (enemyShrinkY * 2)
-        );
-
-        // Si collision détectée
-        if (adjustedPlayerBounds.intersects(adjustedEnemyBounds)) {
-            // Triple protection contre les déclenchements multiples
-            synchronized (this) {
-                // Revérifier toutes les conditions à l'intérieur du bloc synchronisé
-                if (isInvincible || currentTime - lastHitTime < MIN_TIME_BETWEEN_HITS || hitEnemies.contains(enemyId)) {
-                    return;
-                }
-
-                // Marquer cet ennemi comme ayant causé un hit
-                hitEnemies.add(enemyId);
-
-                // Activer l'invincibilité et enregistrer le timestamp
-                isInvincible = true;
-                lastHitTime = currentTime;
-
-                System.out.println("COLLISION LÉGITIME à " + currentTime + " avec ennemi " + enemyId);
-
-                // Gérer la réduction de vie dans le thread UI pour éviter les problèmes de concurrence
-                Platform.runLater(() -> {
-                    // Réduire les vies en toute sécurité
-                    handlePlayerHitSafely();
-
-                    // Supprimer l'ennemi si encore présent
-                    if (gamepane.getChildren().contains(enemy)) {
-                        gamepane.getChildren().remove(enemy);
-                        if (enemies.contains(enemy)) {
-                            enemies.remove(enemy);
-                        }
-                        createExplosion(enemy.getX() + enemy.getFitWidth()/2,
-                                enemy.getY() + enemy.getFitHeight()/2);
-                    }
-                });
-            }
-        }
-    }
-
-    /**
-     * Méthode sécurisée pour gérer la perte de vie du joueur
-     */
-    private void handlePlayerHitSafely() {
-        // Protection supplémentaire pour ne pas réduire les vies plusieurs fois
-        long currentTime = System.currentTimeMillis();
-        if (currentTime - lastHitTime < MIN_TIME_BETWEEN_HITS - 1000) {
-            System.out.println("PROTECTION: Tentative de réduire les vies trop rapidement ignorée");
-            return;
-        }
-
-        // Réduire les vies
-        lives = Math.max(0, lives - 1);
-
-        // Mettre à jour le HUD
-        hud.updateLives(lives);
-        System.out.println("VIE PERDUE: Vies restantes = " + lives);
-
-        // Animation d'invincibilité
-        Timeline blinkTimeline = new Timeline(
-                new KeyFrame(Duration.ZERO, e -> player.setOpacity(0.3)),
-                new KeyFrame(Duration.millis(150), e -> player.setOpacity(1.0))
-        );
-        blinkTimeline.setCycleCount((int)(INVINCIBILITY_DURATION / 300));
-        blinkTimeline.setAutoReverse(true);
-
-        // Programmer la fin de l'invincibilité
-        PauseTransition invincibilityEnd = new PauseTransition(Duration.millis(INVINCIBILITY_DURATION));
-        invincibilityEnd.setOnFinished(e -> {
-            isInvincible = false;
-            player.setOpacity(1.0);
-            System.out.println("FIN INVINCIBILITÉ à " + System.currentTimeMillis());
-        });
-
-        // Jouer les animations en séquence
-        SequentialTransition sequence = new SequentialTransition(blinkTimeline, invincibilityEnd);
-        sequence.play();
-
-        // Vérifier Game Over
-        if (lives <= 0) {
-            gameRunning = false;
-            gameOver(gamepane);
-        }
-    }
-
-    /**
-     * Méthode pour nettoyer les ennemis traités périodiquement
-     * À appeler dans gameLoop ou avec un Timer
-     */
-    public void cleanupHitEnemies() {
-        // Nettoyer la liste des ennemis qui ont causé un hit il y a longtemps
-        long currentTime = System.currentTimeMillis();
-        if (currentTime - lastHitTime > 10000) { // 10 secondes
-            hitEnemies.clear();
-        }
-    }
 
     /**
      * Ajouter cet appel dans votre gameLoop
@@ -973,6 +831,56 @@ public class GameManager {
         blinkTimeline.setAutoReverse(true);
         blinkTimeline.play();
     }
+
+    /**
+     * Méthode robuste pour détecter les collisions
+     */
+    private void checkCollisionWithPlayer(ImageView enemy) {
+        // Ne vérifier les collisions que si le joueur n'est pas invincible
+        // et qu'un hit n'est pas déjà en cours de traitement
+        if (isInvincible || isProcessingHit) {
+            return;
+        }
+
+        // Récupérer les vrais bounds du joueur et de l'ennemi
+        Bounds playerBounds = player.getBoundsInParent();
+        Bounds enemyBounds = enemy.getBoundsInParent();
+
+        // Collision uniquement si les deux objets sont réellement visibles à l'écran
+        if (player.isVisible() && enemy.isVisible() &&
+                // Réduire la zone de collision légèrement pour plus de précision (hitbox réduite)
+                playerBounds.intersects(
+                        enemyBounds.getMinX() + 5, enemyBounds.getMinY() + 5,
+                        enemyBounds.getWidth() - 10, enemyBounds.getHeight() - 10)) {
+
+            // Activer protection contre les collisions multiples
+            isProcessingHit = true;
+            isInvincible = true;
+
+            System.out.println("VRAIE COLLISION DÉTECTÉE à " + System.currentTimeMillis() +
+                    " - Position joueur: (" + player.getX() + "," + player.getY() + ")" +
+                    " - Position ennemi: (" + enemy.getX() + "," + enemy.getY() + ")");
+
+            // Supprimer l'ennemi immédiatement pour éviter des collisions fantômes supplémentaires
+            enemies.remove(enemy);
+
+            Platform.runLater(() -> {
+                // Vérifier à nouveau que l'ennemi est toujours dans le jeu
+                if (gamepane.getChildren().contains(enemy)) {
+                    gamepane.getChildren().remove(enemy);
+                    createExplosion(enemy.getX() + enemy.getFitWidth()/2,
+                            enemy.getY() + enemy.getFitHeight()/2);
+                }
+
+                // Traiter la vie perdue
+                handlePlayerHit();
+            });
+        }
+    }
+
+    /**
+     * Gestion de la perte d'une vie
+     */
     public void handlePlayerHit() {
         // Ne pas réinitialiser les états ici - seulement retirer une vie
         lives = Math.max(0, lives - 1);
@@ -987,9 +895,9 @@ public class GameManager {
         // Créer une nouvelle animation avec clignotement
         invincibilityTimeline = new Timeline(
                 new KeyFrame(Duration.ZERO, new KeyValue(player.opacityProperty(), 0.3)),
-                new KeyFrame(Duration.millis(900), new KeyValue(player.opacityProperty(), 1.0))
+                new KeyFrame(Duration.millis(300), new KeyValue(player.opacityProperty(), 1.0))
         );
-        invincibilityTimeline.setCycleCount(15); // ~3 secondes au total
+        invincibilityTimeline.setCycleCount(10); // ~3 secondes au total
         invincibilityTimeline.setAutoReverse(true);
 
         // Éviter de créer plusieurs gestionnaires d'événements
@@ -1019,6 +927,10 @@ public class GameManager {
         }
     }
 
+    /**
+     * Variables d'état à ajouter à votre classe si elles n'existent pas déjà
+     */
+   // Indique si le joueur est invincible
     // Ajouter cette méthode pour vérifier si des collisions fantômes sont détectées
 
     public void animateEnemy(ImageView enemy) {
@@ -1042,6 +954,67 @@ public class GameManager {
         animation.setCycleCount(Animation.INDEFINITE);
         animation.play();
         activeAnimations.add(animation);
+    }
+    /**
+     * Vérifie la collision entre un ennemi et le joueur
+     * Cette méthode est conçue pour être appelée depuis animateEnemy
+     */
+    private void checkPlayerCollision(ImageView enemy) {
+        // Ne pas vérifier les collisions si le joueur est déjà invincible ou en train de traiter un hit
+        if (isInvincible || isProcessingHit) {
+            return;
+        }
+
+        // Vérifier que l'ennemi et le joueur sont tous les deux visibles et actifs
+        if (!enemy.isVisible() || !player.isVisible() || !enemies.contains(enemy)) {
+            return;
+        }
+
+        // Obtenir les rectangles de collision avec une marge de précision
+        Bounds playerBounds = player.getBoundsInParent();
+        Bounds enemyBounds = enemy.getBoundsInParent();
+
+        // Créer une hitbox légèrement plus petite pour l'ennemi (meilleure précision)
+        double margin = Math.min(enemy.getFitWidth(), enemy.getFitHeight()) * 0.15; // 15% de marge
+
+        // Vérifier l'intersection avec la hitbox ajustée
+        boolean collision = playerBounds.intersects(
+                enemyBounds.getMinX() + margin,
+                enemyBounds.getMinY() + margin,
+                enemyBounds.getWidth() - (margin * 2),
+                enemyBounds.getHeight() - (margin * 2)
+        );
+
+        if (collision) {
+            // Marquer immédiatement comme invincible pour éviter les hits multiples
+            isProcessingHit = true;
+            isInvincible = true;
+
+            // Log de débogage pour suivre les collisions
+            System.out.println("Collision détectée à " + System.currentTimeMillis() +
+                    " | Joueur: (" + player.getX() + "," + player.getY() + ")" +
+                    " | Ennemi: (" + enemy.getX() + "," + enemy.getY() + ")");
+
+            // Retirer immédiatement l'ennemi de la liste pour éviter les collisions multiples
+            enemies.remove(enemy);
+
+            // Utiliser runLater pour gérer les opérations UI
+            Platform.runLater(() -> {
+                // Vérifier que l'ennemi est toujours dans la scène
+                if (gamepane.getChildren().contains(enemy)) {
+                    gamepane.getChildren().remove(enemy);
+
+                    // Créer une explosion à la position de la collision
+                    createExplosion(
+                            enemy.getX() + enemy.getFitWidth()/2,
+                            enemy.getY() + enemy.getFitHeight()/2
+                    );
+                }
+
+                // Gérer la perte de vie
+                handlePlayerHit();
+            });
+        }
     }
     /**
      * Vérifie les collisions avec tous les joueurs sur l'écran
