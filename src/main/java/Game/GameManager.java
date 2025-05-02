@@ -358,20 +358,30 @@ public class GameManager {
         // Stocker l'animation pour pouvoir l'arrêter plus tard
         //activeAnimations.add(positionUpdater);
     }
-    public void setupEnemySpawning() {
+    private void setupEnemySpawning() {
         Timeline enemySpawner = new Timeline(
                 new KeyFrame(Duration.seconds(2), event -> {
                     if (!gameRunning) return;
 
-                    Enemy enemy1 = new Enemy();
-                    ImageView enemy = enemy1.createEnemyAirplane();
-                    if (gamepane != null && enemy != null) {
-                        // Add CSS class for identification
-                        enemy.getStyleClass().add("enemy-ship");
+                    for (int i = 0; i < enemiesPerWave; i++) { // <-- Spawn multiple
+                        Enemy enemy1 = new Enemy(this);
+                        ImageView enemy = enemy1.createEnemyAirplane();
+                        if (gamepane != null && enemy != null) {
+                            // Add CSS class for identification
+                            enemy.getStyleClass().add("enemy-ship");
 
-                        gamepane.getChildren().add(enemy);
-                        enemies.add(enemy);
-                        animateEnemy(enemy);
+                            gamepane.getChildren().add(enemy);
+                            enemies.add(enemy);
+                            animateEnemy(enemy);
+                        }
+                    }
+                    // Ennemis tireurs à partir du niveau 5
+                    if (currentLevel >= 5 && Math.random() < 0.3) { // 30% de chance de spawn
+                        ShooterEnemy shooter = new ShooterEnemy(this);
+                        ImageView shooterEnemy = shooter.getEnemy();
+                        gamepane.getChildren().add(shooterEnemy);
+                        enemies.add(shooterEnemy);
+                        animateEnemy(shooterEnemy);
                     }
                 }
                 ));
@@ -379,9 +389,6 @@ public class GameManager {
         enemySpawner.play();
         activeAnimations.add(enemySpawner);
     }
-
-
-
     // 1. Ajoutez ces variables pour suivre les vies de chaque joueur
     private int player1Lives = 3;
     private int player2Lives = 3;
@@ -595,7 +602,7 @@ public class GameManager {
 
     public void updateGameState() {
         try {
-            Enemy enemy = new Enemy();
+            Enemy enemy = new Enemy(this);
             enemy.updateEnemies();
 
             if (hud != null) {
@@ -639,11 +646,14 @@ public class GameManager {
 
         Timeline timeline = new Timeline(
                 new KeyFrame(Duration.ZERO, new KeyValue(explosion.radiusProperty(), 0)),
-                new KeyFrame(Duration.millis(500), new KeyValue(explosion.radiusProperty(), 30)),
-                new KeyFrame(Duration.millis(500), new KeyValue(explosion.opacityProperty(), 0))
+                new KeyFrame(Duration.millis(200), new KeyValue(explosion.radiusProperty(), 30)),
+                new KeyFrame(Duration.millis(400), new KeyValue(explosion.opacityProperty(), 0))
         );
         timeline.setOnFinished(e -> gamepane.getChildren().remove(explosion));
         timeline.play();
+        if (new Random().nextDouble() < 0.3) {
+            spawnPowerUp(x, y);
+        }
     }
 
     public void startGameThreads() {
@@ -787,35 +797,57 @@ public class GameManager {
     private Timeline invincibilityTimeline; // Référence à l'animation d'invincibilité
     private long lastHitTime = 0; // Timestamp de la dernière collision
 
+    // Variables de classe simplifiées
+    // Timestamp de la dernière collision
+    private static final long INVINCIBILITY_DURATION = 3000; // 3 secondes d'invincibilité
+
+    /**
+     * Méthode de vérification des collisions simplifiée et efficace
+     */
+    // Variables de classe
+
+     // 3 secondes
+    private static final long MIN_TIME_BETWEEN_HITS = 4000; // 4 secondes minimum entre les hits
+    private Set<Integer> hitEnemies = new HashSet<>(); // Pour suivre les ennemis qui ont déjà causé un hit
+
+    /**
+     * Méthode de détection de collision avec protection contre les déclenchements multiples
+     */
     public void checkPlayerCollision(ImageView enemy) {
-        // 1) Vérifications de base et sortie rapide si nécessaire
-        if (player == null || !gameRunning || lives <= 0) {
+        // Vérifications de base
+        if (player == null || !gameRunning || lives <= 0 || enemy == null) {
             return;
         }
 
-        // IMPORTANT: Vérifier l'invincibilité et si un hit est déjà en cours de traitement
-        if (isInvincible || isProcessingHit) {
-            // Si le joueur est invincible ou déjà en train de traiter un hit, ignorer la collision
+        // Obtenir un ID unique pour cet ennemi
+        int enemyId = System.identityHashCode(enemy);
+
+        // Si cet ennemi a déjà causé un hit, l'ignorer complètement
+        if (hitEnemies.contains(enemyId)) {
             return;
         }
 
-        // Vérifier si suffisamment de temps s'est écoulé depuis le dernier hit (anti-spam)
+        // Vérifier le temps écoulé depuis le dernier hit (protection forte)
         long currentTime = System.currentTimeMillis();
-        if (currentTime - lastHitTime < 1000) { // Minimum 1 seconde entre les hits
+        if (currentTime - lastHitTime < MIN_TIME_BETWEEN_HITS) {
+            // Trop tôt pour un autre hit, ignorer cette collision
             return;
         }
 
-        // 3) Utiliser une détection de collision plus précise avec des limites réduites
+        // Si le joueur est invincible, ignorer la collision
+        if (isInvincible) {
+            return;
+        }
+
+        // Vérifier la collision avec une zone réduite
         Bounds playerBounds = player.getBoundsInParent();
         Bounds enemyBounds = enemy.getBoundsInParent();
 
-        // Réduire la zone de collision de 20% pour une détection plus précise
-        double playerShrinkX = playerBounds.getWidth() * 0.2;
-        double playerShrinkY = playerBounds.getHeight() * 0.2;
-        double enemyShrinkX = enemyBounds.getWidth() * 0.2;
-        double enemyShrinkY = enemyBounds.getHeight() * 0.2;
+        double playerShrinkX = playerBounds.getWidth() * 0.25;
+        double playerShrinkY = playerBounds.getHeight() * 0.25;
+        double enemyShrinkX = enemyBounds.getWidth() * 0.25;
+        double enemyShrinkY = enemyBounds.getHeight() * 0.25;
 
-        // Créer des limites ajustées
         Bounds adjustedPlayerBounds = new BoundingBox(
                 playerBounds.getMinX() + playerShrinkX,
                 playerBounds.getMinY() + playerShrinkY,
@@ -830,28 +862,31 @@ public class GameManager {
                 enemyBounds.getHeight() - (enemyShrinkY * 2)
         );
 
-        // Vérifier si les limites ajustées se croisent
+        // Si collision détectée
         if (adjustedPlayerBounds.intersects(adjustedEnemyBounds)) {
-            // Protection contre le traitement simultané de plusieurs collisions
+            // Triple protection contre les déclenchements multiples
             synchronized (this) {
-                if (isInvincible || isProcessingHit) {
+                // Revérifier toutes les conditions à l'intérieur du bloc synchronisé
+                if (isInvincible || currentTime - lastHitTime < MIN_TIME_BETWEEN_HITS || hitEnemies.contains(enemyId)) {
                     return;
                 }
 
-                // Marquer qu'on est en train de traiter un hit et mettre à jour le timestamp
-                isProcessingHit = true;
+                // Marquer cet ennemi comme ayant causé un hit
+                hitEnemies.add(enemyId);
+
+                // Activer l'invincibilité et enregistrer le timestamp
+                isInvincible = true;
                 lastHitTime = currentTime;
 
-                // Définir l'invincibilité IMMÉDIATEMENT avant tout autre traitement
-                isInvincible = true;
-            }
+                System.out.println("COLLISION LÉGITIME à " + currentTime + " avec ennemi " + enemyId);
 
-            System.out.println("Collision détectée avec ennemi ID: " + System.identityHashCode(enemy));
+                // Gérer la réduction de vie dans le thread UI pour éviter les problèmes de concurrence
+                Platform.runLater(() -> {
+                    // Réduire les vies en toute sécurité
+                    handlePlayerHitSafely();
 
-            // Supprimer l'ennemi
-            Platform.runLater(() -> {
-                try {
-                    if (gamepane != null && gamepane.getChildren().contains(enemy)) {
+                    // Supprimer l'ennemi si encore présent
+                    if (gamepane.getChildren().contains(enemy)) {
                         gamepane.getChildren().remove(enemy);
                         if (enemies.contains(enemy)) {
                             enemies.remove(enemy);
@@ -859,17 +894,85 @@ public class GameManager {
                         createExplosion(enemy.getX() + enemy.getFitWidth()/2,
                                 enemy.getY() + enemy.getFitHeight()/2);
                     }
-                } catch (Exception e) {
-                    System.err.println("Erreur lors de la suppression de l'ennemi: " + e.getMessage());
-                }
-                // Nous ne réinitialisons PAS isProcessingHit ici - c'est fait dans handlePlayerHit
-            });
-
-            // Gérer le coup du joueur
-            handlePlayerHit();
+                });
+            }
         }
     }
 
+    /**
+     * Méthode sécurisée pour gérer la perte de vie du joueur
+     */
+    private void handlePlayerHitSafely() {
+        // Protection supplémentaire pour ne pas réduire les vies plusieurs fois
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastHitTime < MIN_TIME_BETWEEN_HITS - 1000) {
+            System.out.println("PROTECTION: Tentative de réduire les vies trop rapidement ignorée");
+            return;
+        }
+
+        // Réduire les vies
+        lives = Math.max(0, lives - 1);
+
+        // Mettre à jour le HUD
+        hud.updateLives(lives);
+        System.out.println("VIE PERDUE: Vies restantes = " + lives);
+
+        // Animation d'invincibilité
+        Timeline blinkTimeline = new Timeline(
+                new KeyFrame(Duration.ZERO, e -> player.setOpacity(0.3)),
+                new KeyFrame(Duration.millis(150), e -> player.setOpacity(1.0))
+        );
+        blinkTimeline.setCycleCount((int)(INVINCIBILITY_DURATION / 300));
+        blinkTimeline.setAutoReverse(true);
+
+        // Programmer la fin de l'invincibilité
+        PauseTransition invincibilityEnd = new PauseTransition(Duration.millis(INVINCIBILITY_DURATION));
+        invincibilityEnd.setOnFinished(e -> {
+            isInvincible = false;
+            player.setOpacity(1.0);
+            System.out.println("FIN INVINCIBILITÉ à " + System.currentTimeMillis());
+        });
+
+        // Jouer les animations en séquence
+        SequentialTransition sequence = new SequentialTransition(blinkTimeline, invincibilityEnd);
+        sequence.play();
+
+        // Vérifier Game Over
+        if (lives <= 0) {
+            gameRunning = false;
+            gameOver(gamepane);
+        }
+    }
+
+    /**
+     * Méthode pour nettoyer les ennemis traités périodiquement
+     * À appeler dans gameLoop ou avec un Timer
+     */
+    public void cleanupHitEnemies() {
+        // Nettoyer la liste des ennemis qui ont causé un hit il y a longtemps
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastHitTime > 10000) { // 10 secondes
+            hitEnemies.clear();
+        }
+    }
+
+    /**
+     * Ajouter cet appel dans votre gameLoop
+     */
+
+    /**
+     * Méthode pour appliquer l'effet visuel d'invincibilité
+     */
+    private void applyInvincibilityEffect() {
+        // Arrêter toute animation en cours
+        Timeline blinkTimeline = new Timeline(
+                new KeyFrame(Duration.ZERO, e -> player.setOpacity(0.3)),
+                new KeyFrame(Duration.millis(150), e -> player.setOpacity(1.0))
+        );
+        blinkTimeline.setCycleCount((int)(INVINCIBILITY_DURATION / 300));
+        blinkTimeline.setAutoReverse(true);
+        blinkTimeline.play();
+    }
     public void handlePlayerHit() {
         // Ne pas réinitialiser les états ici - seulement retirer une vie
         lives = Math.max(0, lives - 1);
@@ -884,7 +987,7 @@ public class GameManager {
         // Créer une nouvelle animation avec clignotement
         invincibilityTimeline = new Timeline(
                 new KeyFrame(Duration.ZERO, new KeyValue(player.opacityProperty(), 0.3)),
-                new KeyFrame(Duration.millis(200), new KeyValue(player.opacityProperty(), 1.0))
+                new KeyFrame(Duration.millis(900), new KeyValue(player.opacityProperty(), 1.0))
         );
         invincibilityTimeline.setCycleCount(15); // ~3 secondes au total
         invincibilityTimeline.setAutoReverse(true);
@@ -1028,7 +1131,7 @@ public class GameManager {
         Platform.runLater(() -> {
             if (!gameRunning) return;
 
-            Enemy enemy = new Enemy();
+            Enemy enemy = new Enemy(this);
             ImageView enemyView = enemy.createEnemyAirplane();
 
             if (enemyView != null) {
@@ -1586,7 +1689,7 @@ public class GameManager {
             ImageView playerView = new ImageView();
             try {
                 // Charger l'image correspondant au type d'avion
-                String imagePath = "/img/aircraft/" + aircraftType + ".png";
+                String imagePath = "aircraft/" + aircraftType + ".png";
                 Image aircraftImage = new Image(getClass().getResourceAsStream(imagePath));
                 playerView.setImage(aircraftImage);
                 System.out.println("Aircraft image loaded: " + imagePath);
@@ -1594,7 +1697,7 @@ public class GameManager {
                 System.err.println("Unable to load aircraft image for type: " + aircraftType);
                 try {
                     // Utiliser une image par défaut si l'image demandée n'est pas trouvée
-                    playerView.setImage(new Image(getClass().getResourceAsStream("/img/aircraft/default.png")));
+                    playerView.setImage(new Image(getClass().getResourceAsStream("airplane.png")));
                 } catch (Exception ex) {
                     System.err.println("Failed to load default aircraft image: " + ex.getMessage());
                     return;

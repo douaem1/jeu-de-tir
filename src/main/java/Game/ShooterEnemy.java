@@ -10,6 +10,9 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.util.Duration;
 
+import java.io.IOException;
+import java.io.InputStream;
+
 public class ShooterEnemy {
     private final GameManager gameManager;
     private final ImageView enemy;
@@ -19,36 +22,95 @@ public class ShooterEnemy {
         this.enemy = createShooterEnemy();
     }
     private ImageView createShooterEnemy() {
+        ImageView shooter = null;
+
         try {
-            Image image = new Image(getClass().getResourceAsStream("enemy_shooter.png"));
-            ImageView shooter = new ImageView(image);
+            // Charger l'image du tireur depuis les ressources
+            InputStream imageStream = getClass().getResourceAsStream("/enemy_shooter.png");
+            if (imageStream == null) {
+                throw new IOException("Image resource not found");
+            }
+
+            Image image = new Image(imageStream);
+            shooter = new ImageView(image);
             shooter.setFitWidth(80);
             shooter.setFitHeight(40);
-            shooter.setX(Math.random() * (GameManager.WINDOW_WIDTH - 80));
-            shooter.setY(-40);
-            shooter.setEffect(new DropShadow(10, Color.PURPLE));
 
-            if (gameManager.currentLevel >= 5) {
+            // Position aléatoire en haut de l'écran
+            shooter.setX(Math.random() * (GameManager.WINDOW_WIDTH - shooter.getFitWidth()));
+            shooter.setY(-shooter.getFitHeight()); // Commence juste hors de l'écran
+
+            // Effet visuel distinctif
+            DropShadow glow = new DropShadow(10, Color.PURPLE);
+            glow.setSpread(0.5);
+            shooter.setEffect(glow);
+
+            // Ajouter une classe CSS pour identification
+            shooter.getStyleClass().add("shooter-enemy");
+
+            // Programmer les tirs seulement à partir du niveau 5
+            if (gameManager != null && gameManager.currentLevel >= 5) {
                 scheduleShots(shooter);
             }
 
-            return shooter;
         } catch (Exception e) {
-            return createFallbackShooter();
+            System.err.println("Error creating shooter enemy: " + e.getMessage());
+            shooter = createFallbackShooter();
         }
-    }
 
+        return shooter;
+    }
     private void scheduleShots(ImageView shooter) {
-        Timeline shotTimer = new Timeline(
-                new KeyFrame(Duration.seconds(1.5 + Math.random() * 2), e -> {
-                    if (gameManager.gameRunning && gameManager.currentLevel >= 5) {
-                        fireProjectile(shooter);
+        if (gameManager == null || !gameManager.gameRunning) return;
+
+        Timeline shootingTimeline = new Timeline(
+                new KeyFrame(Duration.seconds(2), e -> {
+                    if (gameManager.gameRunning && shooter.getParent() != null) {
+                        shootLaser(shooter);
                     }
                 })
         );
-        shotTimer.setCycleCount(Animation.INDEFINITE);
-        shotTimer.play();
-        gameManager.activeAnimations.add(shotTimer);
+        shootingTimeline.setCycleCount(Animation.INDEFINITE);
+        shootingTimeline.play();
+
+        // Stocker l'animation pour pouvoir l'arrêter plus tard
+        gameManager.activeAnimations.add(shootingTimeline);
+    }
+
+    private void shootLaser(ImageView shooter) {
+        Rectangle laser = new Rectangle(4, 20, Color.PURPLE);
+        laser.setEffect(new Glow(0.8));
+
+        // Positionner le laser au centre de l'ennemi
+        double x = shooter.getX() + shooter.getFitWidth()/2 - laser.getWidth()/2;
+        double y = shooter.getY() + shooter.getFitHeight();
+        laser.setX(x);
+        laser.setY(y);
+
+        gameManager.gamepane.getChildren().add(laser);
+
+        // Animation du laser
+        Timeline laserAnimation = new Timeline(
+                new KeyFrame(Duration.millis(16), e -> {
+                    laser.setY(laser.getY() + 5); // Vitesse du laser
+
+                    // Vérifier les collisions avec le joueur
+                    if (laser.getBoundsInParent().intersects(gameManager.player.getBoundsInParent())) {
+                        gameManager.handlePlayerHit();
+                        gameManager.gamepane.getChildren().remove(laser);
+                    }
+
+                    // Supprimer s'il sort de l'écran
+                    if (laser.getY() > GameManager.WINDOW_HEIGHT) {
+                        gameManager.gamepane.getChildren().remove(laser);
+                    }
+                })
+        );
+        laserAnimation.setCycleCount(Animation.INDEFINITE);
+        laserAnimation.play();
+
+        // Stocker l'animation
+        gameManager.activeAnimations.add(laserAnimation);
     }
 
     private void fireProjectile(ImageView shooter) {

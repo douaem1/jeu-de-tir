@@ -23,8 +23,8 @@ public class Enemy {
     public final CopyOnWriteArrayList<ImageView> enemies = new CopyOnWriteArrayList<>();
     private CopyOnWriteArrayList<Rectangle> enemyLasers = new CopyOnWriteArrayList<>();
     private GameManager gameManager;
-    public Enemy() {
-        this.gameManager = gameManager;
+    public Enemy(GameManager gameManager) {
+        this.gameManager = this.gameManager;
     }
     public  Map<String, Color> COLORS = Map.of(
             "PRIMARY", Color.web("#2E86AB"),
