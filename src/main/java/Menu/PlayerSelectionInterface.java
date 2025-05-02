@@ -48,7 +48,7 @@ public class PlayerSelectionInterface {
 
         // Aircraft data
         private final String[] AIRCRAFT_NAMES = {"F-22 Raptor", "Eurofighter Typhoon", "Sukhoi Su-57"};
-        private final String[] AIRCRAFT_IMAGES = {"/avion1.png", "/avion2.png", "/airplane.png"};
+        private final String[] AIRCRAFT_IMAGES = {"/Spaceship_04_RED.png", "/Spaceship_05_BLUE.png", "/Spaceship_02_ORANGE.png"};
         private final String[] AIRCRAFT_DESCRIPTIONS = {
                 "Top speed: Mach 2.25\nManeuverability: Excellent\nSpecial: Stealth technology",
                 "Top speed: Mach 2.0\nManeuverability: Superior\nSpecial: Advanced avionics",

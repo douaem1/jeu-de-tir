@@ -33,7 +33,11 @@ public class Client {
             while(socket.isConnected()){
                 //when the user presses enter in the terminal after typing in that will be captured in this variable
                 String messageToSend = scanner.nextLine();
-                bufferedWriter.write(username + " : " + messageToSend);
+                if (messageToSend.startsWith("/")){
+                    bufferedWriter.write(messageToSend);//mssg privé
+                }else {
+                    bufferedWriter.write(username + " : " + messageToSend);//mssg public
+                }
                 bufferedWriter.newLine();
                 bufferedWriter.flush();
             }
@@ -51,7 +55,15 @@ public class Client {
                     try {
                         //read the broadcast mssg then output it
                         mssgFromGrChat = bufferedReader.readLine();
-                        System.out.println(mssgFromGrChat);
+                        if (mssgFromGrChat != null) {
+                            if (mssgFromGrChat.contains("[Private]")) {
+                                System.out.println("\u001B[35m"+mssgFromGrChat+"\u001B[0m");//violet
+                            } else if (mssgFromGrChat.startsWith("Connected players: ")) {
+                                System.out.println("\u001B[36m" + mssgFromGrChat + "\u001B[0m");
+                            } else {
+                                System.out.println(mssgFromGrChat);
+                            }
+                        }
                     }catch (IOException e){
                         closeEverything(socket,bufferedReader,bufferedWriter);
                     }
@@ -76,18 +88,12 @@ public class Client {
     }
     public static void main(String[] args) throws IOException {
         Scanner scanner = new Scanner(System.in);//we take input from keyboard
-        System.out.println("Enter your username : ");
+        System.out.println("Enter your username (write /pm : for private message and /list : for users) : ");
         String username = scanner.nextLine();
         Socket socket = new Socket("localhost" , 7103);
         Client client = new Client(socket,username);
         client.listenForMessages();
         client.sendMessage();
     }
-    public BufferedReader getBufferedReader() {
-        return bufferedReader;
-    }
 
-    public BufferedWriter getBufferedWriter() {
-        return bufferedWriter;
-    }
 }

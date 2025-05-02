@@ -1505,20 +1505,20 @@ public class GameManager {
 
     //cette méthode pour générer des power-ups
     private void spawnPowerUp(double x, double y) {
-        if (new Random().nextDouble() < 0.3) {// 30% de chance de spawn
-            GameManager gameManager = new GameManager();
-            gameManager.slowEnemiesTemporarily(5); // Ralentit pendant 5 secondes
-
-            PowerUp powerUp = new PowerUp(this, x, y);
-            gamepane.getChildren().add(powerUp.getView());
-            powerUp.animate();
+        if (currentLevel >= 2) {
+            if (new Random().nextDouble() < 0.4) {// 30% de chance de spawn
+                //slowEnemiesTemporarily(5); // Ralentit pendant 5 secondes
+                PowerUp powerUp = new PowerUp(this, x, y);
+                gamepane.getChildren().add(powerUp.getView());
+                powerUp.animate();
+            }
         }
     }
-    // ▼▼▼ Méthode mise à jour pour ralentir au lieu d'arrêter ▼▼▼
+    //  Méthode mise à jour pour ralentir au lieu d'arrêter
     public void slowEnemiesTemporarily(int seconds) {
         enemySpeedMultiplier = 0.3; // Réduit la vitesse à 30%
 
-        // ▼▼▼ Animation visuelle du ralentissement ▼▼▼
+        //  Animation visuelle du ralentissement
         Label effectLabel = new Label("ENNEMIS RALENTIS!");
         effectLabel.setStyle("-fx-font-size: 24; -fx-text-fill: white; -fx-effect: dropshadow(three-pass-box, blue, 10, 0.5, 0, 0);");
         effectLabel.setLayoutX(WINDOW_WIDTH / 2 - 100);
@@ -1531,7 +1531,7 @@ public class GameManager {
         fade.setOnFinished(e -> gamepane.getChildren().remove(effectLabel));
         fade.play();
 
-        // ▼▼▼ Réinitialisation après 'seconds' secondes ▼▼▼
+        //  Réinitialisation après 'seconds' secondes
         Timeline slowTimer = new Timeline(
                 new KeyFrame(Duration.seconds(seconds), e -> {
                     enemySpeedMultiplier = 1.0; // Rétablir la vitesse normale
@@ -1554,10 +1554,10 @@ public class GameManager {
     }
     // Augmente la difficulté
     private void increaseDifficulty() {
-        if (currentLevel < 5) {
+        if (currentLevel < 2) {
             enemySpeed *= 1.2; // +20% de vitesse
         }
-        if (currentLevel < 4) {
+        if (currentLevel < 2) {
             enemiesPerWave++;   // +1 ennemi par vague
         }
         System.out.println("Niveau " + currentLevel + " - Vitesse: " + enemySpeed);

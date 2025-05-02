@@ -52,14 +52,14 @@ public class ClientHandler implements Runnable {
                     if (mssgFromClient.startsWith("/pm")) {
                         sendPrivateMssg(mssgFromClient);
                     }else if (mssgFromClient.startsWith("/list")) {
-                            try {
-                                // Envoyer la réponse UNIQUEMENT au client demandeur
-                                bufferedWriter.write("Connected players: " + getConnectedUsers()); // Pas d'espace avant ":"
-                                bufferedWriter.newLine();
-                                bufferedWriter.flush();
-                            } catch (IOException ex) {
-                                closeEverything(socket, bufferedReader, bufferedWriter);
-                            }
+                        try {
+                            // Envoyer la réponse UNIQUEMENT au client demandeur
+                            bufferedWriter.write("Connected players: " + getConnectedUsers()); // Pas d'espace avant ":"
+                            bufferedWriter.newLine();
+                            bufferedWriter.flush();
+                        } catch (IOException ex) {
+                            closeEverything(socket, bufferedReader, bufferedWriter);
+                        }
                     }else {
                         broadcastMssg(mssgFromClient);
                     }

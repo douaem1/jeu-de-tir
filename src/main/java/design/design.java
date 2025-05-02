@@ -21,7 +21,7 @@ public class design {
     public void setPrimaryStage(Stage primaryStage) {
         this.primaryStage = primaryStage;
     }
-    public   String[] BACKGROUND_PATHS = {"/img.jpg", "/background.jpg", "/backround.jpg"};
+    public   String[] BACKGROUND_PATHS = {"/nebula01.png", "/background.jpg", "/backround.jpg"};
     public CopyOnWriteArrayList<Animation> activeAnimations = new CopyOnWriteArrayList<>();
     //    private ImageView loadBestBackground() {
 //        for (String path : BACKGROUND_PATHS) {
