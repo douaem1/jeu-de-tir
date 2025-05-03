@@ -75,23 +75,16 @@ public class PlayerSelectionInterfaceGuest {
 
     public void showSelectionInterface() {
         StackPane root = new StackPane();
-
-        // Background
         ImageView background = design.loadBestBackground();
         design.setupBackgroundImage(background);
         design.animateBackground(background);
         root.getChildren().add(background);
-
-        // Dark overlay
         Rectangle overlay = design.createOverlay();
         root.getChildren().add(overlay);
-
-        // Main container
         VBox mainContainer = new VBox(30);
         mainContainer.setAlignment(Pos.TOP_CENTER);
         mainContainer.setPadding(new Insets(40));
         mainContainer.setMaxWidth(1000);
-        //Titre
         Label title1 = new Label("WELCOME !");
         Label title = new Label("CHOOSE YOUR FIGHTER");
         title.setFont(Font.font(FONT_FAMILIES[0], FontWeight.EXTRA_BOLD, 54));
@@ -106,24 +99,14 @@ public class PlayerSelectionInterfaceGuest {
         title1.setEffect(new Blend(BlendMode.SCREEN, bloom, glow));
         animation.animateTextGlow(title, glow);
         animation.animateTextGlow(title1, glow);
-
-        // Aircraft selection
         HBox aircraftContainer = createAircraftSelection();
-
-        // Difficulty selection
         VBox difficultyContainer = createDifficultySelection();
-
-        // Start button
         Button startGameBtn = animation.createActionButton("START MISSION", "PRIMARY");
         startGameBtn.setPrefWidth(300);
         startGameBtn.setPrefHeight(60);
-        startGameBtn.setDisable(true); // Initially disabled
-
-        // Return button
+        startGameBtn.setDisable(true);
         Button returnBtn = animation.createActionButton("RETURN", "DARK");
         returnBtn.setPrefWidth(200);
-
-        // Button Actions
         startGameBtn.setOnAction(e -> {
             if (selectedAircraft != null && selectedDifficulty != null) {
                 animation.playButtonPressAnimation(startGameBtn);
@@ -135,25 +118,17 @@ public class PlayerSelectionInterfaceGuest {
             animation.playButtonPressAnimation(returnBtn);
             menuManager.returnToMenu();
         });
-
-        // Enable Start Button if selections are made
         Runnable updateStartButton = () -> {
             startGameBtn.setDisable(selectedAircraft == null || selectedDifficulty == null);
         };
         selectedAircraftProperty.addListener((obs, oldVal, newVal) -> updateStartButton.run());
         selectedDifficultyProperty.addListener((obs, oldVal, newVal) -> updateStartButton.run());
-
-        // Build the main container
         mainContainer.getChildren().addAll(title1,title, aircraftContainer, difficultyContainer, startGameBtn, returnBtn);
 
         root.getChildren().add(mainContainer);
-
-        // Animation
         mainContainer.setOpacity(0);
         mainContainer.setTranslateY(20);
         animateEntrance(mainContainer);
-
-        // Scene
         Scene scene = new Scene(root, WINDOW_WIDTH, WINDOW_HEIGHT);
         primaryStage.setScene(scene);
         primaryStage.setTitle("Fighter Selection - Jet Fighters");
@@ -177,8 +152,6 @@ public class PlayerSelectionInterfaceGuest {
         box.setPadding(new Insets(20));
         box.setMaxWidth(300);
         box.setStyle("-fx-background-color: rgba(10, 10, 30, 0.5); -fx-background-radius: 10;");
-
-        // Image
         ImageView aircraftImage;
         try {
             InputStream is = getClass().getResourceAsStream(AIRCRAFT_IMAGES[index]);
@@ -195,13 +168,9 @@ public class PlayerSelectionInterfaceGuest {
         } catch (Exception e) {
             e.printStackTrace();
         }
-
-        // Name
         Label nameLabel = new Label(AIRCRAFT_NAMES[index]);
         nameLabel.setTextFill(COLORS.get("LIGHT"));
         nameLabel.setFont(Font.font(FONT_FAMILIES[1], FontWeight.BOLD, 20));
-
-        // Description
         Label descriptionLabel = new Label(AIRCRAFT_DESCRIPTIONS[index]);
         descriptionLabel.setTextFill(COLORS.get("LIGHT"));
         descriptionLabel.setFont(Font.font(FONT_FAMILIES[1], 14));
@@ -209,8 +178,6 @@ public class PlayerSelectionInterfaceGuest {
         descriptionLabel.setMaxWidth(260);
 
         box.getChildren().addAll(nameLabel, descriptionLabel);
-
-        // Hover effect
         box.setOnMouseEntered(e -> {
             box.setStyle("-fx-background-color: rgba(20, 20, 50, 0.7); -fx-background-radius: 10;");
             box.setScaleX(1.05);
@@ -228,19 +195,15 @@ public class PlayerSelectionInterfaceGuest {
             box.setScaleY(1);
             box.setCursor(javafx.scene.Cursor.DEFAULT);
         });
-
-        // Selection action
         box.setOnMouseClicked((MouseEvent e) -> selectAircraft(index, box));
 
         return box;
     }
 
     private void selectAircraft(int index, VBox selectedBox) {
-        selectedAircraft = AIRCRAFT_NAMES[index];  // Mettez à jour l'avion sélectionné
+        selectedAircraft = AIRCRAFT_NAMES[index];
 
         selectedAircraftProperty.set(selectedAircraft);
-
-        // Mettre à jour l'interface avec la sélection de l'avion
         for (Node node : ((HBox) selectedBox.getParent()).getChildren()) {
             if (node instanceof VBox) {
                 node.setStyle("-fx-background-color: rgba(10, 10, 30, 0.5); -fx-background-radius: 10;");
@@ -295,7 +258,6 @@ public class PlayerSelectionInterfaceGuest {
     }
 
     private void startGame() {
-        // Utiliser l'avion sélectionné avant de démarrer le jeu
-        gameManager.startGame(selectedAircraft);  // Passer l'avion sélectionné au GameManager
+        gameManager.startGame(selectedAircraft);
     }
 }

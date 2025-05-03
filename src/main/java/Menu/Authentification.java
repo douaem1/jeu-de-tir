@@ -28,9 +28,7 @@ import design.animation;
 import javafx.scene.Scene;
 import javafx.application.Platform;
 
-/*This class handles the user authentication process, including sign-in and sign-up functionalities.
-  It provides a graphical user interface for users to input their credentials and interact with the application.
- */
+
 
 public class Authentification {
 
@@ -58,73 +56,39 @@ public class Authentification {
         this.gameManager = new GameManager();
     }
 
-    // [showSignInScene method remains unchanged]
-
-    private Map<String, ImageView> playerViews = new HashMap<>(); // Pour stocker les vues des joueurs
-    private Map<String, String> playerAircraftTypes = new HashMap<>(); // Pour stocker les types d'avions des joueurs
-    private Set<String> connectedPlayers = new HashSet<>();
-    /**
-     * Démarre l'interface du jeu multijoueur
-     * @param gameStage La fenêtre du jeu
-     * @param gameClient Le client connecté au serveur
-     * @param user L'utilisateur connecté
-     */
     private void startMultiplayerGame(Stage gameStage, GameClient gameClient, users user) {
         Platform.runLater(() -> {
             try {
-                // Configurer la scène du jeu
+
                 StackPane root = new StackPane();
                 design design = new design();
 
-                // Charger et configurer l'arrière-plan
+
                 ImageView background = design.loadBestBackground();
                 design.setupBackgroundImage(background);
                 root.getChildren().add(background);
 
-                // Ajouter un overlay pour une meilleure visibilité
                 Rectangle overlay = design.createOverlay();
                 root.getChildren().add(overlay);
 
-                // Créer le conteneur principal du jeu
                 BorderPane gameLayout = new BorderPane();
 
-                // Initialiser le gestionnaire de jeu avec la scène
                 GameManager gameManager = new GameManager();
                 gameManager.setPrimaryStage(gameStage);
 
-                // Configurer le panneau de jeu et l'ajouter au centre
+
                 Pane gamePane = new Pane();
                 gamePane.setPrefSize(WINDOW_WIDTH, WINDOW_HEIGHT);
                 gameLayout.setCenter(gamePane);
-
-                // Définir le GamePane comme attribut statique pour pouvoir l'utiliser ailleurs
                 GameManager.gamepane = gamePane;
-
-                // Ajouter le chat en bas (si nécessaire)
-                //VBox chatBox = gameClient.getChatInterface();
-
-                // Ajouter le layout du jeu à la racine
                 root.getChildren().add(gameLayout);
-
-                // Créer la scène
                 Scene gameScene = new Scene(root, WINDOW_WIDTH, WINDOW_HEIGHT);
                 gameStage.setScene(gameScene);
                 gameStage.show();
-
-                // Notifier le serveur que le jeu est prêt
-                //gameClient.sendMessage("GAME_READY");
-
-                // Sélectionner un avion par défaut pour le joueur
                 String selectedAircraft = "default";
-
-                // Démarrer le jeu immédiatement avec une configuration par défaut
                 gameManager.startGame(selectedAircraft);
-
-                // Créer des joueurs et configurer les contrôles
                 gameManager.setupHUD();
                 gameManager.setupControls();
-
-                // Démarrer les threads de jeu
                 gameManager.gameRunning = true;
                 gameManager.startGameThreads();
 
@@ -138,7 +102,7 @@ public class Authentification {
         });
     }
 
-    // [showSignUpScene method remains unchanged]
+
 
 
     public void showSignInScene() {
@@ -175,15 +139,11 @@ public class Authentification {
 
         Button loginBtn = animation.createActionButton("SIGN IN", "PRIMARY");
         loginBtn.setPrefWidth(200);
-
-        // Nouveau bouton pour jouer avec des amis
         Button playWithFriendsBtn = animation.createActionButton("PLAY WITH FRIENDS", "SECONDARY");
         playWithFriendsBtn.setPrefWidth(200);
 
         Button backBtn = animation.createActionButton("Return", "DARK");
         backBtn.setPrefWidth(200);
-
-        // Correction pour le bouton de retour
         backBtn.setOnAction(e -> {
             animation.playButtonPressAnimation(backBtn);
             MenuManager menuManager = new MenuManager(primaryStage);
@@ -206,12 +166,12 @@ public class Authentification {
             MenuManager menuManager = new MenuManager(primaryStage);
             if (isValid) {
                 menuManager.showNotification("Sign in successful!");
+                PlayerSelectionInterface selectionInterface = new PlayerSelectionInterface(primaryStage);
+                selectionInterface.showSelectionInterface();
             } else {
                 menuManager.showNotification("Incorrect username or password or inexistant account (Sign up first)");
             }
         });
-
-        // Action pour le bouton Play with Friends
         playWithFriendsBtn.setOnAction(e -> {
             String username = usernameField.getText();
             String password = passwordField.getText();
@@ -262,8 +222,6 @@ public class Authentification {
         Button signupBtn = animation.createActionButton("SIGN UP", "ACCENT");
         signupBtn.setPrefWidth(200);
         MenuManager menuManager = new MenuManager(primaryStage);
-
-        // Récupération Input
         signupBtn.setOnAction(e -> {
             animation.playButtonPressAnimation(signupBtn);
 
@@ -288,16 +246,15 @@ public class Authentification {
                 newUser.addUser(newUser);
 
                 menuManager.showNotification("Account created successfully!");
+                PlayerSelectionInterface selectionInterface = new PlayerSelectionInterface(primaryStage);
+                selectionInterface.showSelectionInterface();
             }
         });
 
         Button backBtn = animation.createActionButton("Return", "DARK");
         backBtn.setPrefWidth(200);
-
-        // Correction pour le bouton de retour
         backBtn.setOnAction(e -> {
             animation.playButtonPressAnimation(backBtn);
-            // MenuManager menuManager = new MenuManager(primaryStage);
             menuManager.returnToMenu();
         });
 
@@ -312,14 +269,14 @@ public class Authentification {
 
         animation.animateFormEntrance(signupBox);
     }
-    // 1. Modified joinGameServer method
+
     private void joinGameServer(users user, String serverAddress) {
         Thread clientThread = new Thread(() -> {
             try {
-                // Add a timeout to the socket connection
+
                 Socket socket = null;
                 try {
-                    // Try to connect with a 5-second timeout
+
                     socket = new Socket();
                     socket.connect(new java.net.InetSocketAddress(serverAddress, 7103), 5000);
 
@@ -363,12 +320,9 @@ public class Authentification {
         clientThread.start();
     }
 
-    // 2. Modified startGameServer method
     private void startGameServer(users user) {
-        // Launch server in a separate thread
         Thread serverThread = new Thread(() -> {
             try {
-                // Try to create server socket with specific port
                 ServerSocket serverSocket = null;
                 try {
                     serverSocket = new ServerSocket(7103);
@@ -399,21 +353,15 @@ public class Authentification {
         });
         serverThread.setDaemon(true);
         serverThread.start();
-
-        // Wait a moment for the server to initialize before connecting
         try {
             Thread.sleep(1000);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
 
-        // Connect client host to own server
         joinGameServer(user, "localhost");
     }
-
-    // 3. Modified showMultiplayerOptions method
     private void showMultiplayerOptions(users user) {
-        // Create dialog box to choose between creating or joining a game
         VBox optionsBox = new VBox(20);
         optionsBox.setAlignment(Pos.CENTER);
         optionsBox.setPadding(new Insets(40));
@@ -432,7 +380,6 @@ public class Authentification {
         Button joinGameBtn = animation.createActionButton("JOIN GAME", "SECONDARY");
         joinGameBtn.setPrefWidth(300);
 
-        // Add label to show connection status
         Label statusLabel = new Label("");
         statusLabel.setFont(Font.font(FONT_FAMILIES[0], FontWeight.NORMAL, 14));
         statusLabel.setTextFill(COLORS.get("LIGHT"));
@@ -446,8 +393,6 @@ public class Authentification {
         backBtn.setPrefWidth(300);
 
         optionsBox.getChildren().addAll(title, hostGameBtn, joinGameBtn, serverAddressField, statusLabel, backBtn);
-
-        // Display options
         Stage optionsStage = new Stage();
         optionsStage.setTitle("Multiplayer Options");
         StackPane root = new StackPane();
@@ -466,16 +411,12 @@ public class Authentification {
         optionsStage.setScene(optionsScene);
         optionsStage.show();
 
-        // Button actions
         hostGameBtn.setOnAction(e -> {
             statusLabel.setText("Starting server...");
             statusLabel.setVisible(true);
             hostGameBtn.setDisable(true);
             joinGameBtn.setDisable(true);
 
-
-
-            // Use a timer to provide feedback while starting server
             new Thread(() -> {
                 try {
                     Thread.sleep(500);
@@ -536,7 +477,6 @@ public class Authentification {
         }
     }
 
-    // 5. New utility method to get local IP address
     private String getLocalIPAddress() {
         try {
             return java.net.InetAddress.getLocalHost().getHostAddress();

@@ -13,13 +13,12 @@ import javafx.scene.effect.Bloom;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
-import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 import Game.GameManager;
-import javafx.application.Platform;
+
 
 public class MenuManager {
     private Stage primaryStage;
@@ -112,22 +111,12 @@ public class MenuManager {
         signUpBtn.setMaxWidth(Double.MAX_VALUE);
         signInBtn.setMaxWidth(Double.MAX_VALUE);
         quitBtn.setMaxWidth(Double.MAX_VALUE);
-
-        // Corrected implementation for "START AS A GUEST"
         startBtn.setOnAction(e -> {
             System.out.println("Bouton START AS A GUEST cliqué");
             try {
-                // Animation de bouton
                 animation.playButtonPressAnimation(startBtn);
-
-                // Create and show the player selection interface
                 PlayerSelectionInterfaceGuest selectionInterface = new PlayerSelectionInterfaceGuest(primaryStage);
-
-                // We need to pass the GameManager to the selection interface
-                // so that when aircraft is selected, it can properly start the game
                 selectionInterface.setGameManager(gamemanager);
-
-                // Show the selection interface - this will let the player choose aircraft and difficulty
                 selectionInterface.showSelectionInterface();
             } catch (Exception ex) {
                 System.err.println("Erreur lors de l'affichage de l'interface de sélection: " + ex.getMessage());

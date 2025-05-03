@@ -19,12 +19,9 @@ public class HUD {
     public BorderPane hudContainer;
     public Label scoreLabel;
     public Label livesLabel;
-    public Label levelLabel;  // Nouveau label pour le niveau
-
-    // Référence à la classe HUD depuis GameManager
+    public Label levelLabel;
     public HUD() {
         this.gameManager = null;
-        // Constructeur vide pour la compatibilité existante
     }
 
     public HUD(GameManager gameManager) {
@@ -36,39 +33,28 @@ public class HUD {
         hudContainer.setPrefWidth(GameManager.WINDOW_WIDTH);
         hudContainer.setPrefHeight(GameManager.WINDOW_HEIGHT);
         hudContainer.setMouseTransparent(true);
-
-        // Créer le HUD supérieur pour le score
         HBox topHUD = new HBox(20);
         topHUD.setAlignment(Pos.TOP_LEFT);
         topHUD.setPadding(new Insets(15));
-//*Ce que j ai ajouté pour levels *********************
         levelLabel = new Label("NIVEAU: 1");
         levelLabel.setFont(Font.font("Agency FB", FontWeight.BOLD, 28));
         levelLabel.setTextFill(Color.WHITE);
         levelLabel.setEffect(new DropShadow(5, Color.BLACK));
 
-        topHUD.getChildren().add(levelLabel); // Ajoute à côté du score
-//**********************************************************************************
-        // Label du score avec style amélioré
+        topHUD.getChildren().add(levelLabel);
         scoreLabel = new Label("SCORE: 0");
         scoreLabel.setFont(Font.font("Agency FB", FontWeight.BOLD, 28));
         scoreLabel.setTextFill(Color.WHITE);
         scoreLabel.setEffect(new DropShadow(5, Color.BLACK));
-
-        // Label des vies avec style amélioré
         livesLabel = new Label("VIES: 3");
         livesLabel.setFont(Font.font("Agency FB", FontWeight.BOLD, 28));
         livesLabel.setTextFill(Color.WHITE);
         livesLabel.setEffect(new DropShadow(5, Color.BLACK));
-
-        // Ajouter les labels au HUD
         topHUD.getChildren().addAll(scoreLabel, livesLabel);
-
-        // Placer le HUD en haut de l'écran
         hudContainer.setTop(topHUD);
     }
 
-    // Méthode spécifique pour mettre à jour le score
+    //  mettre à jour le score
     public void updateScore(int newScore) {
         if (scoreLabel != null) {
             Platform.runLater(() -> {
@@ -77,15 +63,10 @@ public class HUD {
             });
         }
     }
-
-    // Méthode spécifique pour mettre à jour les vies
     public void updateLives(int newLives) {
         Platform.runLater(() -> {
             if (livesLabel != null) {
-                // Format simple et direct
                 livesLabel.setText("VIES: " + newLives);
-
-                // Animation optionnelle mais contrôlée
                 try {
                     String currentText = livesLabel.getText().replace("VIES: ", "");
                     int currentLives = Integer.parseInt(currentText);
@@ -120,10 +101,6 @@ public class HUD {
             Platform.runLater(() -> levelLabel.setText("NIVEAU: " + newlevel));
         }
     }
-
-
-
-    // Méthode générale pour mettre à jour tout le HUD
     public void updateHUD() {
         if (gameManager != null) {
             updateScore(gameManager.score);

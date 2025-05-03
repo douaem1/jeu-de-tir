@@ -67,13 +67,8 @@ public class Scores {
     public List<Scores> UsernameScore(String username){
         List<Scores> ListScores = new ArrayList<Scores>();
         try{
-            // ouvrir la connexion a la base de données
-            // Statement eest pour executer des requete SQL
-            // recuperer les resultats de excuteQuery par ResultSet
-            //stm.excuteQuery
             Statement stm = ConnexionDB.seConnecter();
             ResultSet rs=stm.executeQuery("SELECT * From Scores WHERE username='"+username+"'ORDER BY round_date DESC");
-            // tant qu'il reste des resultats a lire
             while (rs.next()){
                 Scores score = new Scores();
                 score.setUsername(rs.getString("username"));
@@ -88,7 +83,7 @@ public class Scores {
         }
         return ListScores;
     }
-    //supprimmer un score de la liste
+
     public void DeleteScore(Scores score){
         try {
             Statement stm = ConnexionDB.seConnecter();

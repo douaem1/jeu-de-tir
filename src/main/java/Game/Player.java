@@ -11,58 +11,37 @@ import javafx.util.Duration;
 
 
 public class Player {
-    // Référence directe au GameManager parent
     public  GameManager gameManager;
     private String selectedAircraft;
-
-    // Constantes
     private final double LASER_SPEED = 10.0;
 
     public Player(GameManager gameManager) {
         this.gameManager = gameManager;
-        // Get the selected aircraft from the GameManager
         if (gameManager != null) {
             this.selectedAircraft = gameManager.selectedAircraft;
         }
     }
 
-    public Player(int i, int i1, String selectedAircraft) {
-        this.selectedAircraft = selectedAircraft;
 
-    }
 
     public void fireEnhancedLaser(Pane gamePane, ImageView player) {
         System.out.println("Tentative de tir: " + (gameManager != null ? "Manager OK" : "Manager NULL"));
-
-        // Vérification visuelle dans la console pour s'assurer que le tir est tenté
         System.out.println("Position du laser: X=" + (player.getX() + player.getFitWidth()/2) + ", Y=" + player.getY());
-
-        // Création du laser
         Rectangle laser = new Rectangle(6, 25, Color.LIMEGREEN);
         laser.setX(player.getX() + player.getFitWidth()/2 - 3);
-        laser.setY(player.getY() - 10); // Commence juste au-dessus du joueur
-
-        // Ajout d'un effet visuel pour mieux voir le laser
+        laser.setY(player.getY() - 10);
         laser.setArcWidth(4);
         laser.setArcHeight(4);
-
-        // Ajout du laser à la scène
         Platform.runLater(() -> {
             gamePane.getChildren().add(laser);
             System.out.println("Laser ajouté à la scène");
         });
-
-        // Animation du mouvement du laser
         Timeline timeline = new Timeline(
                 new KeyFrame(Duration.millis(16), event -> {
                     laser.setY(laser.getY() - LASER_SPEED);
-
-                    // Vérification des collisions
                     if (gameManager != null) {
                         gameManager.checkLaserCollisions(gamePane, laser);
                     }
-
-                    // Suppression du laser s'il sort de l'écran
                     if (laser.getY() < -30) {
                         Platform.runLater(() -> {
                             gamePane.getChildren().remove(laser);
@@ -73,8 +52,6 @@ public class Player {
 
         timeline.setCycleCount(Animation.INDEFINITE);
         timeline.play();
-
-        // Ajouter aux animations actives pour pouvoir l'arrêter plus tard
         if (gameManager != null) {
             gameManager.activeAnimations.add(timeline);
         }
@@ -95,12 +72,10 @@ public class Player {
 
         } catch (Exception e) {
             System.err.println("Erreur chargement joueur: " + e.getMessage());
-            // Fallback to a simple shape if image loading fails
             Rectangle fallbackPlayer = new Rectangle(100, 80, Color.BLUE);
             fallbackPlayer.setX(GameManager.WINDOW_WIDTH / 2 - 50);
             fallbackPlayer.setY(GameManager.WINDOW_HEIGHT - 150);
             ImageView fallbackView = new ImageView();
-            // Convert rectangle to image
             SnapshotParameters params = new SnapshotParameters();
             params.setFill(Color.TRANSPARENT);
             Image fallbackImage = fallbackPlayer.snapshot(params, null);
@@ -112,9 +87,8 @@ public class Player {
     private String getAircraftImagePath(String aircraftName) {
         if (aircraftName == null) {
             System.out.println("Warning: No aircraft selected, using default");
-            return "/Spaceship_02_ORANGE.png"; // Default aircraft
+            return "/Spaceship_02_ORANGE.png";
         }
-
         switch (aircraftName) {
             case "F-22 Raptor":
                 return "/Spaceship_04_RED.png";
@@ -124,7 +98,7 @@ public class Player {
                 return "/Spaceship_02_ORANGE.png";
             default:
                 System.out.println("Unknown aircraft: " + aircraftName + ", using default");
-                return "/Spaceship_02_ORANGE.png";  // Option par défaut
+                return "/Spaceship_02_ORANGE.png";
         }
     }
 }

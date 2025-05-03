@@ -37,59 +37,30 @@ public class Enemy {
 
     public void updateEnemies() {
         enemies.removeIf(enemy -> {
-            // Mettre à jour la position de l'ennemi
             enemy.setY(enemy.getY() + gameManager.enemySpeed);
-
-            // Si l'ennemi sort de l'écran
             if (enemy.getY() > GameManager.WINDOW_HEIGHT) {
                 Platform.runLater(() -> gameManager.gamepane.getChildren().remove(enemy));
                 return true; // Supprime l'ennemi de la liste
             }
             return false;
         });
-
-        // Mettre à jour les lasers ennemis
         updateEnemyLasers();
     }
 
-    // ========================= GRAPHIQUES =========================
 
-    public void spawnEnemy() {
-        try {
-            Image image = new Image(getClass().getResourceAsStream("/enemy.png"));
-            ImageView enemy = new ImageView(image);
-            enemy.setFitWidth(150);
-            enemy.setX(Math.random() * (WINDOW_WIDTH - 150));
-            enemies.add(enemy);
-
-            gamepane.getChildren().add(enemy);
-            gameManager.animateEnemy(enemy);
-        } catch (Exception e) {
-            System.err.println("Erreur chargement ennemi: " + e.getMessage());
-        }
-    }
     public ImageView createEnemyAirplane() {
         try {
-            //  charger l'image depuis les ressources
             InputStream is = getClass().getResourceAsStream("/Ship_2_C_Medium.png");
             if (is != null) {
                 Image enemyImage = new Image(is);
                 ImageView enemy = new ImageView(enemyImage);
-
-                // Générer des dimensions aléatoires pour la largeur et la hauteur
-                double width = 100; // Largeur entre 80 et 150
-                double height = 50;  // Hauteur entre 30 et 60
-
-                // Appliquer les dimensions aléatoires
+                double width = 100;
+                double height = 50;
                 enemy.setFitWidth(width);
                 enemy.setFitHeight(height);
                 enemy.setPreserveRatio(true);
-
-                // Position aléatoire en X, apparition hors écran en Y
                 enemy.setX(Math.random() * (WINDOW_WIDTH - width));
-                enemy.setY(-height);  // Commence au-dessus de l'écran
-
-                // Effet visuel optionnel
+                enemy.setY(-height);
                 enemy.setEffect(new DropShadow(10, Color.RED));
 
                 return enemy;
@@ -98,7 +69,6 @@ public class Enemy {
             System.err.println("Erreur de chargement de l'image ennemi: " + e.getMessage());
         }
 
-        // 2. Fallback graphique si l'image n'est pas trouvée
         Polygon enemyShape = new Polygon(
                 0.0, 20.0,
                 15.0, 0.0,
@@ -112,46 +82,9 @@ public class Enemy {
         enemyShape.setFill(COLORS.get("DANGER"));  // Rouge
         enemyShape.setStroke(COLORS.get("LIGHT")); // Bordure blanche
         enemyShape.setStrokeWidth(2);
-
-        // Création d'une ImageView à partir du Polygon
         ImageView fallbackEnemy = new ImageView(enemyShape.snapshot(null, null));
-
-        // Générer des dimensions aléatoires pour le fallback
-        double fallbackWidth = 80 + Math.random() * 70;  // Largeur entre 80 et 150
-        double fallbackHeight = 30 + Math.random() * 30; // Hauteur entre 30 et 60
-
-        // Appliquer les dimensions aléatoires
-        fallbackEnemy.setFitWidth(fallbackWidth);
-        fallbackEnemy.setFitHeight(fallbackHeight);
-        fallbackEnemy.setX(Math.random() * (WINDOW_WIDTH - fallbackWidth));
-        fallbackEnemy.setY(-fallbackHeight);
-
-        return fallbackEnemy;
-    }
-    private ImageView createFallbackEnemy() {
-        // 2. Fallback graphique si l'image n'est pas trouvée
-        Polygon enemyShape = new Polygon(
-                0.0, 20.0,
-                15.0, 0.0,
-                30.0, 20.0,
-                25.0, 20.0,
-                25.0, 40.0,
-                5.0, 40.0,
-                5.0, 20.0
-        );
-
-        enemyShape.setFill(COLORS.get("DANGER"));  // Rouge
-        enemyShape.setStroke(COLORS.get("LIGHT")); // Bordure blanche
-        enemyShape.setStrokeWidth(2);
-
-        // Création d'une ImageView à partir du Polygon
-        ImageView fallbackEnemy = new ImageView(enemyShape.snapshot(null, null));
-
-        // Générer des dimensions aléatoires pour le fallback
-        double fallbackWidth = 80 + Math.random() * 70;  // Largeur entre 80 et 150
-        double fallbackHeight = 30 + Math.random() * 30; // Hauteur entre 30 et 60
-
-        // Appliquer les dimensions aléatoires
+        double fallbackWidth = 80 + Math.random() * 70;
+        double fallbackHeight = 30 + Math.random() * 30;
         fallbackEnemy.setFitWidth(fallbackWidth);
         fallbackEnemy.setFitHeight(fallbackHeight);
         fallbackEnemy.setX(Math.random() * (WINDOW_WIDTH - fallbackWidth));
@@ -160,7 +93,6 @@ public class Enemy {
         return fallbackEnemy;
     }
 
-    // ******Méthode de planification des tirs *********
     private void scheduleEnemyShots(ImageView enemy) {
         Random random = new Random();
         Timeline shotTimer = new Timeline(
@@ -174,8 +106,6 @@ public class Enemy {
         shotTimer.play();
         gameManager.activeAnimations.add(shotTimer);
     }
-
-    // ***********Méthode de création du laser *************
     public void fireEnemyLaser(ImageView enemy) {
         if (gameManager.currentLevel >=6 && gameManager.gameRunning) {
             Rectangle laser = new Rectangle(4, 15, Color.RED);
@@ -201,8 +131,6 @@ public class Enemy {
                                 removeLaser(laser);
                                 ((Timeline) e.getSource()).stop();
                             }
-
-                            // Vérifier collision avec joueur
                             if (gameManager.player != null && laser.getBoundsInParent().intersects(gameManager.player.getBoundsInParent())) {
                                 gameManager.handlePlayerHit();
                                 removeLaser(laser);

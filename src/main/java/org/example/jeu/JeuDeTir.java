@@ -12,28 +12,16 @@ public class JeuDeTir extends Application {
 
     @Override
     public void start(Stage stage) {
-        // Stockage de référence au primaryStage
         JeuDeTir.primaryStage = stage;
-
-        // Configuration initiale de la scène avec une racine vide
         StackPane root = new StackPane();
         Scene scene = new Scene(root, GameManager.WINDOW_WIDTH, GameManager.WINDOW_HEIGHT);
         stage.setScene(scene);
-
-        // Configuration du stage
         stage.setTitle("Jet Fighters");
         stage.setResizable(false);
-
-        // Création du GameManager
         gameManager = new GameManager();
         gameManager.setPrimaryStage(stage);
-
-        // Configuration du menu principal
         gameManager.setupMainMenu();
-
-        // Affichage du stage
         stage.show();
-
         System.out.println("Application démarrée avec succès!");
     }
 
@@ -44,11 +32,6 @@ public class JeuDeTir extends Application {
         }
         System.out.println("Application arrêtée");
     }
-
-    public static Stage getPrimaryStage() {
-        return primaryStage;
-    }
-
     public static void main(String[] args) {
         launch(args);
     }

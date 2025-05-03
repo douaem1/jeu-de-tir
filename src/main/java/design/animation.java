@@ -7,7 +7,7 @@ import javafx.scene.control.*;
 import javafx.scene.effect.*;
 import javafx.scene.layout.*;
 import javafx.scene.paint.*;
-import javafx.scene.shape.*;
+
 
 import javafx.stage.Stage;
 import javafx.util.Duration;
@@ -81,19 +81,6 @@ public class animation {
         parallel.play();
         activeAnimations.add(parallel);
 
-    }
-    public void createExplosion(double x, double y) {
-        Circle explosion = new Circle(x, y, 0, Color.ORANGERED);
-        explosion.setEffect(new Glow(0.8));
-        gamepane.getChildren().add(explosion);
-
-        Timeline timeline = new Timeline(
-                new KeyFrame(Duration.ZERO, new KeyValue(explosion.radiusProperty(), 0)),
-                new KeyFrame(Duration.millis(200), new KeyValue(explosion.radiusProperty(), 30)),
-                new KeyFrame(Duration.millis(400), new KeyValue(explosion.opacityProperty(), 0))
-        );
-        timeline.setOnFinished(e -> gamepane.getChildren().remove(explosion));
-        timeline.play();
     }
     public Button createActionButton(String text, String colorKey) {
         Color color = COLORS.get(colorKey);

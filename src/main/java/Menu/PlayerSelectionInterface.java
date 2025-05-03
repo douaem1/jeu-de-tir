@@ -134,25 +134,20 @@ public class PlayerSelectionInterface {
                 animation.playButtonPressAnimation(returnBtn);
                 menuManager.returnToMenu();
             });
-
-            // Enable Start Button if selections are made
             Runnable updateStartButton = () -> {
                 startGameBtn.setDisable(selectedAircraft == null || selectedDifficulty == null);
             };
             selectedAircraftProperty.addListener((obs, oldVal, newVal) -> updateStartButton.run());
             selectedDifficultyProperty.addListener((obs, oldVal, newVal) -> updateStartButton.run());
 
-            // Build the main container
             mainContainer.getChildren().addAll(title1,title, aircraftContainer, difficultyContainer, startGameBtn, returnBtn);
 
             root.getChildren().add(mainContainer);
 
-            // Animation
             mainContainer.setOpacity(0);
             mainContainer.setTranslateY(20);
             animateEntrance(mainContainer);
 
-            // Scene
             Scene scene = new Scene(root, WINDOW_WIDTH, WINDOW_HEIGHT);
             primaryStage.setScene(scene);
             primaryStage.setTitle("Fighter Selection - Jet Fighters");
@@ -195,12 +190,10 @@ public class PlayerSelectionInterface {
                 e.printStackTrace();
             }
 
-            // Name
+
             Label nameLabel = new Label(AIRCRAFT_NAMES[index]);
             nameLabel.setTextFill(COLORS.get("LIGHT"));
             nameLabel.setFont(Font.font(FONT_FAMILIES[1], FontWeight.BOLD, 20));
-
-            // Description
             Label descriptionLabel = new Label(AIRCRAFT_DESCRIPTIONS[index]);
             descriptionLabel.setTextFill(COLORS.get("LIGHT"));
             descriptionLabel.setFont(Font.font(FONT_FAMILIES[1], 14));
@@ -209,7 +202,7 @@ public class PlayerSelectionInterface {
 
             box.getChildren().addAll(nameLabel, descriptionLabel);
 
-            // Hover effect
+
             box.setOnMouseEntered(e -> {
                 box.setStyle("-fx-background-color: rgba(20, 20, 50, 0.7); -fx-background-radius: 10;");
                 box.setScaleX(1.05);
@@ -228,7 +221,7 @@ public class PlayerSelectionInterface {
                 box.setCursor(javafx.scene.Cursor.DEFAULT);
             });
 
-            // Selection action
+
             box.setOnMouseClicked((MouseEvent e) -> selectAircraft(index, box));
 
             return box;
@@ -294,8 +287,7 @@ public class PlayerSelectionInterface {
         }
 
         private void startGame() {
-            // Utiliser l'avion sélectionné avant de démarrer le jeu
-            gameManager.startGame(selectedAircraft);  // Passer l'avion sélectionné au GameManager
+            gameManager.startGame(selectedAircraft);
         }
     }
 

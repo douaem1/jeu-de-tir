@@ -6,10 +6,6 @@ import java.net.Socket;
 import java.util.Timer;
 import java.util.TimerTask;
 
-/**
- * Serveur de jeu multijoueur
- * Gère les connexions des clients et assure la synchronisation du jeu
- */
 public class GameServer {
     private ServerSocket serverSocket;
     private Timer gameUpdateTimer;
@@ -23,8 +19,6 @@ public class GameServer {
         this.serverSocket = serverSocket;
         this.gameUpdateTimer = new Timer();
         this.gameState = GameState.getInstance();
-
-        // Démarrer une tâche qui s'exécute périodiquement pour mettre à jour l'état du jeu
         this.gameUpdateTimer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
@@ -138,7 +132,7 @@ public class GameServer {
         }
     }
 
-    // Méthode principale
+    // le main
     public static void main(String[] args) throws IOException {
         int port = 7103;
         try {
@@ -151,4 +145,5 @@ public class GameServer {
             e.printStackTrace();
         }
     }
+
 }

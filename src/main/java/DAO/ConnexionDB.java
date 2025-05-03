@@ -30,11 +30,4 @@ public class ConnexionDB {
         return stm;
     }
 
-    public static void seDeconnecter(){
-        try {
-            connexion.close();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-    }
 }

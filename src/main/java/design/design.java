@@ -23,22 +23,7 @@ public class design {
     }
     public   String[] BACKGROUND_PATHS = {"/nebula01.png", "/background.jpg", "/backround.jpg"};
     public CopyOnWriteArrayList<Animation> activeAnimations = new CopyOnWriteArrayList<>();
-    //    private ImageView loadBestBackground() {
-//        for (String path : BACKGROUND_PATHS) {
-//            try (InputStream is = getClass().getResourceAsStream(path)) {
-//                if (is != null) {
-//                    Image image = new Image(is);
-//                    ImageView view = new ImageView(image);
-//                    setupBackgroundImage(view);
-//                    return view;
-//                }
-//            } catch (Exception e) {
-//                System.err.println("Erreur de chargement de l'image: " + path);
-//            }
-//        }
-//        return createDefaultBackground();
-//    }
-    public ImageView createDefaultBackground() {
+   public ImageView createDefaultBackground() {
         Rectangle rect = new Rectangle(WINDOW_WIDTH, WINDOW_HEIGHT);
         rect.setFill(new RadialGradient(0, 0, 0.5, 0.5, 0.8, true, CycleMethod.NO_CYCLE,
                 new Stop(0, Color.web("#1a2a6c")),

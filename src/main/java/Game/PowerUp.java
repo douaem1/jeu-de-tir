@@ -34,7 +34,6 @@ public class PowerUp {
             powerUpView = new ImageView(new Image(getClass().getResourceAsStream(
                     "/powerup_" + type.toLowerCase() + ".png")));
         } catch (Exception e) {
-            // Fallback visuel si l'image n'est pas trouvée
             powerUpView = new ImageView();
             Circle circle = new Circle(15);
             powerUpView.setImage(circle.snapshot(null, null));
@@ -51,20 +50,16 @@ public class PowerUp {
     }
 
     public void activate() {
-        if (activated) return; // Ne pas réactiver si déjà utilisé
+        if (activated) return;
         switch(type) {
             case "EXTRA_LIFE":
-                activated = true; // Marquer comme utilisé
-
-                // Version ultra-fiable avec vérification
+                activated = true;
                 int oldLives = gameManager.lives;
                 if (oldLives < 5) {
-                    gameManager.lives = oldLives + 1; // Incrément atomique
+                    gameManager.lives = oldLives + 1;
 
                     System.out.println("[POWERUP] Vie ajoutée. Ancien: " + oldLives
                             + ", Nouveau: " + gameManager.lives);
-
-                    // Mise à jour unique du HUD
                     gameManager.hud.updateLivesDirect(gameManager.lives);
 
                     showLifeGainFeedback();
