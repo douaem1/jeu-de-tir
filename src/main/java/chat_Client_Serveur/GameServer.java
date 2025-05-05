@@ -3,147 +3,172 @@ package chat_Client_Serveur;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.Timer;
-import java.util.TimerTask;
+import java.net.SocketException;
+import java.util.Random;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class GameServer {
     private ServerSocket serverSocket;
-    private Timer gameUpdateTimer;
-    private GameState gameState;
-    private boolean gameStarted = false;
-    private static final int REQUIRED_PLAYERS = 2; // Nombre de joueurs requis pour démarrer le jeu
-    private static final int UPDATE_RATE = 50; // Fréquence de mise à jour du jeu en ms (20 FPS)
+    private ExecutorService threadPool;
+    private ScheduledExecutorService scheduler;
+    private volatile boolean isRunning = false;
+    private final Random random = new Random();
+    private final GameState gameState = GameState.getInstance();
 
-    // Constructeur
+    // Game settings
+    private static final int MIN_ENEMY_SPAWN_DELAY = 3000; // ms
+    private static final int MAX_ENEMY_SPAWN_DELAY = 8000; // ms
+    private static final int ENEMY_MOVEMENT_INTERVAL = 500; // ms
+    private static final int GAME_STATE_BROADCAST_INTERVAL = 1000; // ms
+    private static final int ENEMY_DESCENT_SPEED = 1; // pixels per update
+
+    // Constructor that takes a server socket
     public GameServer(ServerSocket serverSocket) {
         this.serverSocket = serverSocket;
-        this.gameUpdateTimer = new Timer();
-        this.gameState = GameState.getInstance();
-        this.gameUpdateTimer.scheduleAtFixedRate(new TimerTask() {
-            @Override
-            public void run() {
-                // Vérifier si le jeu doit démarrer (si on a assez de joueurs)
-                checkGameStart();
-
-                // Mettre à jour le jeu uniquement s'il est démarré
-                if (gameStarted) {
-                    updateGame();
-                }
-            }
-        }, 0, UPDATE_RATE);
+        this.threadPool = Executors.newCachedThreadPool();
+        this.scheduler = Executors.newScheduledThreadPool(2);
     }
 
-    // Vérifier si le jeu doit démarrer ou s'arrêter
-    private void checkGameStart() {
-        int playerCount = GameClientHandler.clientHandlers.size();
-
-        // Démarrer le jeu quand le nombre requis de joueurs est atteint
-        if (!gameStarted && playerCount >= REQUIRED_PLAYERS) {
-            gameStarted = true;
-            System.out.println("Nombre de joueurs requis atteint (" + REQUIRED_PLAYERS + "). Démarrage du jeu!");
-
-            // Envoyer un message à tous les clients pour démarrer le jeu
-            for (GameClientHandler clientHandler : GameClientHandler.clientHandlers) {
-                clientHandler.sendMessage("START_GAME");
-            }
-        }
-
-        // Arrêter le jeu si on descend en-dessous du minimum requis
-        else if (gameStarted && playerCount < REQUIRED_PLAYERS) {
-            gameStarted = false;
-            System.out.println("Nombre de joueurs insuffisant. Mise en pause du jeu.");
-
-            // Envoyer un message à tous les clients pour mettre le jeu en pause
-            for (GameClientHandler clientHandler : GameClientHandler.clientHandlers) {
-                clientHandler.sendMessage("PAUSE_GAME");
-            }
-        }
-
-        // Si on n'a pas assez de joueurs, envoyer un message d'attente
-        else if (!gameStarted && playerCount > 0 && playerCount < REQUIRED_PLAYERS) {
-            // Informer les clients qu'on attend plus de joueurs
-            for (GameClientHandler clientHandler : GameClientHandler.clientHandlers) {
-                clientHandler.sendMessage("WAITING_FOR_PLAYERS " + (REQUIRED_PLAYERS - playerCount));
-            }
-        }
-    }
-
-    // Mise à jour périodique du jeu
-    private void updateGame() {
-        // Générer des ennemis selon une probabilité
-        gameState.spawnEnemies();
-
-        // Déplacer les ennemis existants
-        gameState.moveEnemies();
-
-        // Vérifier les collisions entre joueurs et ennemis
-        gameState.checkCollisions();
-
-        // Diffuser le nouvel état du jeu à tous les clients
-        if (!GameClientHandler.clientHandlers.isEmpty()) {
-            String gameStateString = gameState.getGameStateAsString();
-            for (GameClientHandler clientHandler : GameClientHandler.clientHandlers) {
-                clientHandler.sendMessage(gameStateString);
-            }
-        }
-    }
-
-    // Démarrer le serveur
     public void startServer() {
         try {
-            System.out.println("Serveur en attente de connexions sur le port " + serverSocket.getLocalPort());
+            isRunning = true;
+            System.out.println("Server started on port " + serverSocket.getLocalPort());
 
-            while (!serverSocket.isClosed()) {
-                // Attendre qu'un client se connecte
-                Socket socket = serverSocket.accept();
-                System.out.println("Un nouveau joueur s'est connecté au serveur!");
+            // Start enemy spawn thread
+            startEnemySpawner();
 
-                // Créer un handler pour ce client et le démarrer dans un thread séparé
-                GameClientHandler clientHandler = new GameClientHandler(socket);
-                Thread thread = new Thread(clientHandler);
-                thread.start();
+            // Start game state broadcast thread
+            startGameStateBroadcaster();
 
-                // Informer tous les clients du nombre actuel de joueurs
-                for (GameClientHandler handler : GameClientHandler.clientHandlers) {
-                    handler.sendMessage("PLAYER_COUNT " + GameClientHandler.clientHandlers.size());
+            // Start enemy movement thread
+            startEnemyMovement();
+
+            // Main server loop
+            while (isRunning && !serverSocket.isClosed()) {
+                try {
+                    Socket socket = serverSocket.accept();
+                    System.out.println("New client connected: " + socket.getInetAddress().getHostAddress());
+
+                    // Create a new client handler for each connected client
+                    GameClientHandler clientHandler = new GameClientHandler(socket);
+                    threadPool.execute(clientHandler);
+
+                } catch (SocketException se) {
+                    if (isRunning) {
+                        System.err.println("Server socket exception: " + se.getMessage());
+                    }
+                } catch (IOException e) {
+                    if (isRunning) {
+                        System.err.println("Error accepting client connection: " + e.getMessage());
+                    }
                 }
             }
-        } catch (IOException e) {
-            System.err.println("Erreur dans le serveur: " + e.getMessage());
+        } catch (Exception e) {
+            System.err.println("Server error: " + e.getMessage());
+            e.printStackTrace();
+        } finally {
             closeServerSocket();
         }
     }
 
-    // Fermer le socket du serveur
-    public void closeServerSocket() {
+    private void startEnemySpawner() {
+        scheduler.scheduleWithFixedDelay(() -> {
+            try {
+                // Only spawn enemies if game has at least 2 players
+                if (gameState.getPlayerCount() >= 2) {
+                    // Random position at top of screen
+                    int x = random.nextInt(1100) + 50; // Between 50 and 1150
+                    int y = random.nextInt(100); // Top of screen
+                    int health = 100;
+
+                    // Add enemy to game state
+                    String enemyId = gameState.addEnemy(x, y, health);
+
+                    // Broadcast to all clients
+                    for (GameClientHandler handler : GameClientHandler.clientHandlers) {
+                        handler.sendMessage("ENEMY_SPAWN " + enemyId + "," + x + "," + y);
+                    }
+
+                    System.out.println("Spawned enemy " + enemyId + " at position " + x + "," + y);
+                }
+            } catch (Exception e) {
+                System.err.println("Error in enemy spawner: " + e.getMessage());
+            }
+        }, 5000, MIN_ENEMY_SPAWN_DELAY + random.nextInt(MAX_ENEMY_SPAWN_DELAY - MIN_ENEMY_SPAWN_DELAY), TimeUnit.MILLISECONDS);
+    }
+
+    private void startGameStateBroadcaster() {
+        scheduler.scheduleAtFixedRate(() -> {
+            try {
+                if (gameState.getPlayerCount() >= 1) {
+                    String gameStateStr = gameState.getGameStateAsString();
+                    for (GameClientHandler handler : GameClientHandler.clientHandlers) {
+                        handler.sendMessage(gameStateStr);
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("Error broadcasting game state: " + e.getMessage());
+            }
+        }, GAME_STATE_BROADCAST_INTERVAL, GAME_STATE_BROADCAST_INTERVAL, TimeUnit.MILLISECONDS);
+    }
+
+      public void stopServer() {
+        isRunning = false;
+        closeServerSocket();
+        threadPool.shutdown();
+        scheduler.shutdown();
+
         try {
-            if (serverSocket != null) {
+            if (!threadPool.awaitTermination(5, TimeUnit.SECONDS)) {
+                threadPool.shutdownNow();
+            }
+            if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
+                scheduler.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            threadPool.shutdownNow();
+            scheduler.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+
+        System.out.println("Server stopped");
+    }
+
+    private void closeServerSocket() {
+        try {
+            if (serverSocket != null && !serverSocket.isClosed()) {
                 serverSocket.close();
             }
+        } catch (IOException e) {
+            System.err.println("Error closing server socket: " + e.getMessage());
+        }
+    }
+    private void startEnemyMovement() {
+        scheduler.scheduleAtFixedRate(() -> {
+            try {
+                if (gameState.getPlayerCount() >= 2) {
+                    // Update positions for all enemies
+                    for (String enemyId : gameState.getEnemyIds()) {
+                        // Make enemies move downward
+                        gameState.moveEnemyDown(enemyId, ENEMY_DESCENT_SPEED);
 
-            // Arrêter le timer
-            if (gameUpdateTimer != null) {
-                gameUpdateTimer.cancel();
+                        // Check if enemy has reached bottom of screen
+                        if (gameState.getEnemyY(enemyId) > 750) {
+                            // Remove enemy when it goes off screen
+                            gameState.removeEnemy(enemyId);
+                            // Broadcast enemy removal to all clients
+                            for (GameClientHandler handler : GameClientHandler.clientHandlers) {
+                                handler.sendMessage("ENEMY_REMOVE " + enemyId);
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("Error updating enemy positions: " + e.getMessage());
             }
-
-            System.out.println("Serveur arrêté");
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        }, ENEMY_MOVEMENT_INTERVAL, ENEMY_MOVEMENT_INTERVAL, TimeUnit.MILLISECONDS);
     }
-
-    // le main
-    public static void main(String[] args) throws IOException {
-        int port = 7103;
-        try {
-            ServerSocket serverSocket = new ServerSocket(port);
-            GameServer server = new GameServer(serverSocket);
-            System.out.println("Serveur de jeu démarré sur le port " + port);
-            server.startServer();
-        } catch (IOException e) {
-            System.err.println("Impossible de démarrer le serveur sur le port " + port);
-            e.printStackTrace();
-        }
-    }
-
 }

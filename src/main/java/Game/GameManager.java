@@ -36,13 +36,16 @@ public class GameManager {
     private final int[] LEVEL_SCORE_THRESHOLDS = {60, 100, 160, 220, 290, 350};
     private boolean isInvincible = false;
 
-    private String currentUsername;
+    String currentUsername;
     String selectedAircraft;
     public static final int WINDOW_WIDTH = 1200;
     public static final int WINDOW_HEIGHT = 800;
     public static final int PLAYER_WIDTH = 50;
     public  static final int PLAYER_HEIGHT = 50;
     private long startTime;
+    private Map<String, ImageView> opponentPlayers = new ConcurrentHashMap<>();
+    private Map<String, Integer> opponentHealth = new ConcurrentHashMap<>();
+    private boolean pvpMode = false;
 
 
 
@@ -79,7 +82,7 @@ public class GameManager {
 
     public PrintWriter out;
 
-    private final  Map<String, ImageView> playerViews = new HashMap<>();
+    public final  Map<String, ImageView> playerViews = new HashMap<>();
     private final Map<String, String> playerAircraftTypes = new HashMap<>();
     private  final Set<String> connectedPlayers = new HashSet<>();
 
@@ -282,7 +285,7 @@ public class GameManager {
         activeAnimations.add(enemySpawner);
     }
 
-    private boolean isMultiplayerMode = false;
+    boolean isMultiplayerMode = false;
 
 
 

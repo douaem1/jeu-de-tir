@@ -273,42 +273,53 @@ public class Authentification {
     private void joinGameServer(users user, String serverAddress) {
         Thread clientThread = new Thread(() -> {
             try {
+                // Create a new stage for the game
+                Platform.runLater(() -> {
+                    Stage gameStage = new Stage();
+                    gameStage.setTitle("Jet Fighters Multiplayer - " + user.getUsername());
 
-                Socket socket = null;
-                try {
+                    // Initialize game UI and components
+                    StackPane root = new StackPane();
+                    design design = new design();
 
-                    socket = new Socket();
-                    socket.connect(new java.net.InetSocketAddress(serverAddress, 7103), 5000);
+                    ImageView background = design.loadBestBackground();
+                    design.setupBackgroundImage(background);
+                    root.getChildren().add(background);
 
-                    final Socket finalSocket = socket;
-                    Platform.runLater(() -> {
-                        // Create new window for multiplayer game
-                        Stage gameStage = new Stage();
-                        gameStage.setTitle("Jet Fighters Multiplayer - " + user.getUsername());
+                    Rectangle overlay = design.createOverlay();
+                    root.getChildren().add(overlay);
 
-                        // Initialize game client
-                        GameClient gameClient = new GameClient();
+                    BorderPane gameLayout = new BorderPane();
 
-                        // Start listening for messages from server
-                        //gameClient.listenForMessage();
+                    GameManager gameManager = new GameManager();
+                    gameManager.setPrimaryStage(gameStage);
 
-                        // Start the multiplayer game
-                        startMultiplayerGame(gameStage, gameClient, user);
-                    });
-                } catch (java.net.ConnectException e) {
-                    Platform.runLater(() -> {
-                        MenuManager menuManager = new MenuManager(primaryStage);
-                        menuManager.showNotification("Connection refused: The server may not be running.");
-                    });
-                    e.printStackTrace();
-                } catch (java.net.SocketTimeoutException e) {
-                    Platform.runLater(() -> {
-                        MenuManager menuManager = new MenuManager(primaryStage);
-                        menuManager.showNotification("Connection timed out: Server might be unreachable.");
-                    });
-                    e.printStackTrace();
-                }
-            } catch (IOException e) {
+                    Pane gamePane = new Pane();
+                    gamePane.setPrefSize(WINDOW_WIDTH, WINDOW_HEIGHT);
+                    gameLayout.setCenter(gamePane);
+                    GameManager.gamepane = gamePane;
+                    root.getChildren().add(gameLayout);
+
+                    Scene gameScene = new Scene(root, WINDOW_WIDTH, WINDOW_HEIGHT);
+                    gameStage.setScene(gameScene);
+                    gameStage.show();
+
+                    // Initialize game client with user credentials
+                    GameClient gameClient = new GameClient(user.getUsername(), serverAddress, gameManager);
+
+                    // Start the game with default aircraft
+                    String selectedAircraft = "default";
+                    gameManager.startGame(selectedAircraft);
+                    gameManager.setupHUD();
+                    gameManager.setupControls();
+                    gameManager.gameRunning = true;
+                    gameManager.startGameThreads();
+
+                    // Display connecting message
+                    MenuManager menuManager = new MenuManager(primaryStage);
+                    menuManager.showNotification("Connected to game server at " + serverAddress);
+                });
+            } catch (Exception e) {
                 Platform.runLater(() -> {
                     MenuManager menuManager = new MenuManager(primaryStage);
                     menuManager.showNotification("Error connecting to server: " + e.getMessage());
@@ -319,7 +330,6 @@ public class Authentification {
         clientThread.setDaemon(true);
         clientThread.start();
     }
-
     private void startGameServer(users user) {
         Thread serverThread = new Thread(() -> {
             try {
