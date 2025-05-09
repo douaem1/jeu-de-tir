@@ -1,174 +1,271 @@
 package chat_Client_Serveur;
 
-import java.io.IOException;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.net.SocketException;
-import java.util.Random;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.io.*;
+import java.net.*;
+import java.util.*;
+import java.util.concurrent.*;
 
 public class GameServer {
+    private static final int PORT = 5555;
     private ServerSocket serverSocket;
-    private ExecutorService threadPool;
-    private ScheduledExecutorService scheduler;
-    private volatile boolean isRunning = false;
-    private final Random random = new Random();
-    private final GameState gameState = GameState.getInstance();
+    private ConcurrentHashMap<String, ClientHandler> clients = new ConcurrentHashMap<>();
+    private ConcurrentHashMap<String, PlayerInfo> playerInfos = new ConcurrentHashMap<>();
+    private CopyOnWriteArrayList<EnemyInfo> enemies = new CopyOnWriteArrayList<>();
+    private ExecutorService pool = Executors.newCachedThreadPool();
+    private volatile boolean running = false;
+    private int nextEnemyId = 1;
 
-    // Game settings
-    private static final int MIN_ENEMY_SPAWN_DELAY = 3000; // ms
-    private static final int MAX_ENEMY_SPAWN_DELAY = 8000; // ms
-    private static final int ENEMY_MOVEMENT_INTERVAL = 500; // ms
-    private static final int GAME_STATE_BROADCAST_INTERVAL = 1000; // ms
-    private static final int ENEMY_DESCENT_SPEED = 1; // pixels per update
-
-    // Constructor that takes a server socket
-    public GameServer(ServerSocket serverSocket) {
-        this.serverSocket = serverSocket;
-        this.threadPool = Executors.newCachedThreadPool();
-        this.scheduler = Executors.newScheduledThreadPool(2);
+    public GameServer() {
+        this.serverSocket = null;
+        this.clients = new ConcurrentHashMap<>();
+        this.playerInfos = new ConcurrentHashMap<>();
+        this.enemies = new CopyOnWriteArrayList<>();
+        this.pool = Executors.newCachedThreadPool();
+        this.running = false;
+        this.nextEnemyId = 1;
     }
 
-    public void startServer() {
+    public static void main(String[] args) {
+        GameServer server = new GameServer();
+        server.start();
+    }
+
+    public void start() {
         try {
-            isRunning = true;
-            System.out.println("Server started on port " + serverSocket.getLocalPort());
+            serverSocket = new ServerSocket(PORT);
+            running = true;
+            System.out.println("Game server started on port " + PORT);
 
-            // Start enemy spawn thread
-            startEnemySpawner();
+            // Démarrer le thread pour la génération des ennemis
+            startEnemyGenerator();
 
-            // Start game state broadcast thread
-            startGameStateBroadcaster();
+            // Démarrer le thread pour la mise à jour des ennemis
+            startEnemyUpdater();
 
-            // Start enemy movement thread
-            startEnemyMovement();
+            // Accepter les connexions entrantes
+            while (running) {
+                Socket clientSocket = serverSocket.accept();
+                String clientId = UUID.randomUUID().toString();
 
-            // Main server loop
-            while (isRunning && !serverSocket.isClosed()) {
-                try {
-                    Socket socket = serverSocket.accept();
-                    System.out.println("New client connected: " + socket.getInetAddress().getHostAddress());
+                System.out.println("New client connected: " + clientId);
 
-                    // Create a new client handler for each connected client
-                    GameClientHandler clientHandler = new GameClientHandler(socket);
-                    threadPool.execute(clientHandler);
-
-                } catch (SocketException se) {
-                    if (isRunning) {
-                        System.err.println("Server socket exception: " + se.getMessage());
-                    }
-                } catch (IOException e) {
-                    if (isRunning) {
-                        System.err.println("Error accepting client connection: " + e.getMessage());
-                    }
-                }
+                // Créer un gestionnaire de client et le démarrer
+                ClientHandler handler = new ClientHandler(clientSocket, clientId, this);
+                clients.put(clientId, handler);
+                pool.execute(handler);
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             System.err.println("Server error: " + e.getMessage());
-            e.printStackTrace();
         } finally {
-            closeServerSocket();
+            stop();
         }
     }
 
-    private void startEnemySpawner() {
-        scheduler.scheduleWithFixedDelay(() -> {
+    private void startEnemyGenerator() {
+        pool.execute(() -> {
             try {
-                // Only spawn enemies if game has at least 2 players
-                if (gameState.getPlayerCount() >= 2) {
-                    // Random position at top of screen
-                    int x = random.nextInt(1100) + 50; // Between 50 and 1150
-                    int y = random.nextInt(100); // Top of screen
-                    int health = 100;
-
-                    // Add enemy to game state
-                    String enemyId = gameState.addEnemy(x, y, health);
-
-                    // Broadcast to all clients
-                    for (GameClientHandler handler : GameClientHandler.clientHandlers) {
-                        handler.sendMessage("ENEMY_SPAWN " + enemyId + "," + x + "," + y);
-                    }
-
-                    System.out.println("Spawned enemy " + enemyId + " at position " + x + "," + y);
-                }
-            } catch (Exception e) {
-                System.err.println("Error in enemy spawner: " + e.getMessage());
-            }
-        }, 5000, MIN_ENEMY_SPAWN_DELAY + random.nextInt(MAX_ENEMY_SPAWN_DELAY - MIN_ENEMY_SPAWN_DELAY), TimeUnit.MILLISECONDS);
-    }
-
-    private void startGameStateBroadcaster() {
-        scheduler.scheduleAtFixedRate(() -> {
-            try {
-                if (gameState.getPlayerCount() >= 1) {
-                    String gameStateStr = gameState.getGameStateAsString();
-                    for (GameClientHandler handler : GameClientHandler.clientHandlers) {
-                        handler.sendMessage(gameStateStr);
+                while (running) {
+                    if (clients.size() > 0) {
+                        // Générer un nouvel ennemi toutes les 2 secondes
+                        createEnemy();
+                        Thread.sleep(2000);
+                    } else {
+                        Thread.sleep(1000);
                     }
                 }
-            } catch (Exception e) {
-                System.err.println("Error broadcasting game state: " + e.getMessage());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
-        }, GAME_STATE_BROADCAST_INTERVAL, GAME_STATE_BROADCAST_INTERVAL, TimeUnit.MILLISECONDS);
+        });
     }
 
-      public void stopServer() {
-        isRunning = false;
-        closeServerSocket();
-        threadPool.shutdown();
-        scheduler.shutdown();
+    private void startEnemyUpdater() {
+        pool.execute(() -> {
+            try {
+                while (running) {
+                    updateEnemies();
+                    Thread.sleep(16);  // ~60 FPS
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+    }
 
-        try {
-            if (!threadPool.awaitTermination(5, TimeUnit.SECONDS)) {
-                threadPool.shutdownNow();
+    private void createEnemy() {
+        // Création d'un ennemi avec une position aléatoire en haut de l'écran
+        int enemyId = nextEnemyId++;
+        double x = Math.random() * 1100;  // Pour éviter les bords
+        EnemyInfo enemy = new EnemyInfo(enemyId, x, -50);
+        enemies.add(enemy);
+
+        // Informer tous les clients du nouvel ennemi
+        broadcast("ENEMY_SPAWN|" + enemyId + "|" + x + "|" + -50);
+    }
+
+    private void updateEnemies() {
+        Iterator<EnemyInfo> iter = enemies.iterator();
+        while (iter.hasNext()) {
+            EnemyInfo enemy = iter.next();
+            enemy.y += 0.5;  // Même vitesse que dans le code original
+
+            // Si l'ennemi sort de l'écran, le supprimer
+            if (enemy.y > 800) {
+                iter.remove();
+                broadcast("ENEMY_REMOVE|" + enemy.id);
             }
-            if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
-                scheduler.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            threadPool.shutdownNow();
-            scheduler.shutdownNow();
-            Thread.currentThread().interrupt();
         }
 
-        System.out.println("Server stopped");
+        // Envoyer les mises à jour seulement si nécessaire (tous les 5 frames soit ~12 fois par seconde)
+        if (System.currentTimeMillis() % 80 == 0) {
+            for (EnemyInfo enemy : enemies) {
+                broadcast("ENEMY_POS|" + enemy.id + "|" + enemy.x + "|" + enemy.y);
+            }
+        }
     }
 
-    private void closeServerSocket() {
+    public void registerPlayer(String clientId, String aircraft, double x, double y) {
+        PlayerInfo info = new PlayerInfo(clientId, aircraft, x, y);
+        playerInfos.put(clientId, info);
+
+        // Informer tous les clients du nouveau joueur
+        broadcast("PLAYER_JOIN|" + clientId + "|" + aircraft + "|" + x + "|" + y);
+
+        // Informer le nouveau joueur de tous les joueurs existants
+        ClientHandler newClient = clients.get(clientId);
+        for (Map.Entry<String, PlayerInfo> entry : playerInfos.entrySet()) {
+            if (!entry.getKey().equals(clientId)) {
+                PlayerInfo player = entry.getValue();
+                newClient.sendMessage("PLAYER_JOIN|" + player.id + "|" + player.aircraft + "|" + player.x + "|" + player.y);
+            }
+        }
+
+        // Informer le nouveau joueur de tous les ennemis existants
+        for (EnemyInfo enemy : enemies) {
+            newClient.sendMessage("ENEMY_SPAWN|" + enemy.id + "|" + enemy.x + "|" + enemy.y);
+        }
+    }
+
+    public void updatePlayerPosition(String clientId, double x, double y) {
+        PlayerInfo info = playerInfos.get(clientId);
+        if (info != null) {
+            info.x = x;
+            info.y = y;
+
+            // Informer tous les autres clients du mouvement
+            broadcastExcept("PLAYER_POS|" + clientId + "|" + x + "|" + y, clientId);
+        }
+    }
+
+    public void handlePlayerShot(String clientId, double x, double y) {
+        // Informer tous les clients du tir
+        broadcast("PLAYER_SHOT|" + clientId + "|" + x + "|" + y);
+    }
+
+    public void handleEnemyHit(String clientId, int enemyId) {
+        // Vérifier si l'ennemi existe
+        boolean enemyFound = false;
+        for (EnemyInfo enemy : enemies) {
+            if (enemy.id == enemyId) {
+                enemyFound = true;
+                enemies.remove(enemy);
+                break;
+            }
+        }
+
+        if (enemyFound) {
+            // Mettre à jour le score du joueur
+            PlayerInfo player = playerInfos.get(clientId);
+            if (player != null) {
+                player.score += 10;
+
+                // Informer tous les clients de la destruction de l'ennemi et du score
+                broadcast("ENEMY_DESTROYED|" + enemyId + "|" + clientId + "|" + player.score);
+            }
+        }
+    }
+
+    public void handleChatMessage(String clientId, String message) {
+        PlayerInfo sender = playerInfos.get(clientId);
+        if (sender != null) {
+            broadcast("CHAT|" + clientId + "|" + message);
+        }
+    }
+
+    public void removeClient(String clientId) {
+        clients.remove(clientId);
+        PlayerInfo removedPlayer = playerInfos.remove(clientId);
+
+        if (removedPlayer != null) {
+            broadcast("PLAYER_LEAVE|" + clientId);
+        }
+
+        System.out.println("Client disconnected: " + clientId);
+    }
+
+    private void broadcast(String message) {
+        for (ClientHandler client : clients.values()) {
+            client.sendMessage(message);
+        }
+    }
+
+    private void broadcastExcept(String message, String exceptClientId) {
+        for (Map.Entry<String, ClientHandler> entry : clients.entrySet()) {
+            if (!entry.getKey().equals(exceptClientId)) {
+                entry.getValue().sendMessage(message);
+            }
+        }
+    }
+
+    public void stop() {
+        running = false;
         try {
             if (serverSocket != null && !serverSocket.isClosed()) {
                 serverSocket.close();
             }
         } catch (IOException e) {
-            System.err.println("Error closing server socket: " + e.getMessage());
+            System.err.println("Error closing server: " + e.getMessage());
+        }
+
+        pool.shutdown();
+        try {
+            if (!pool.awaitTermination(5, TimeUnit.SECONDS)) {
+                pool.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            pool.shutdownNow();
         }
     }
-    private void startEnemyMovement() {
-        scheduler.scheduleAtFixedRate(() -> {
-            try {
-                if (gameState.getPlayerCount() >= 2) {
-                    // Update positions for all enemies
-                    for (String enemyId : gameState.getEnemyIds()) {
-                        // Make enemies move downward
-                        gameState.moveEnemyDown(enemyId, ENEMY_DESCENT_SPEED);
 
-                        // Check if enemy has reached bottom of screen
-                        if (gameState.getEnemyY(enemyId) > 750) {
-                            // Remove enemy when it goes off screen
-                            gameState.removeEnemy(enemyId);
-                            // Broadcast enemy removal to all clients
-                            for (GameClientHandler handler : GameClientHandler.clientHandlers) {
-                                handler.sendMessage("ENEMY_REMOVE " + enemyId);
-                            }
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                System.err.println("Error updating enemy positions: " + e.getMessage());
-            }
-        }, ENEMY_MOVEMENT_INTERVAL, ENEMY_MOVEMENT_INTERVAL, TimeUnit.MILLISECONDS);
+    // Classe interne pour stocker les infos d'un joueur
+    private static class PlayerInfo {
+        String id;
+        String aircraft;
+        double x;
+        double y;
+        int score;
+        int lives;
+
+        public PlayerInfo(String id, String aircraft, double x, double y) {
+            this.id = id;
+            this.aircraft = aircraft;
+            this.x = x;
+            this.y = y;
+            this.score = 0;
+            this.lives = 3;
+        }
+    }
+
+    // Classe interne pour stocker les infos d'un ennemi
+    private static class EnemyInfo {
+        int id;
+        double x;
+        double y;
+
+        public EnemyInfo(int id, double x, double y) {
+            this.id = id;
+            this.x = x;
+            this.y = y;
+        }
     }
 }

@@ -1,10 +1,9 @@
 package Menu;
-
-
 import Game.GameManager;
-import chat_Client_Serveur.GameClient;
-import chat_Client_Serveur.GameServer;
+import Game.MultiplayerManager;
+import javafx.application.Platform;
 import javafx.geometry.*;
+import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.effect.*;
 import javafx.scene.image.*;
@@ -14,26 +13,36 @@ import javafx.scene.shape.*;
 import javafx.scene.text.*;
 import DAO.users;
 import javafx.stage.Stage;
-import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.util.Map;
 import design.design;
 import design.animation;
 import javafx.scene.Scene;
-import javafx.application.Platform;
+import javafx.scene.control.Button;
+import javafx.scene.control.PasswordField;
+import javafx.scene.control.TextField;
+import javafx.scene.layout.VBox;
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-
+/**
+ * This class handles the user authentication process, including sign-in and sign-up functionalities.
+ * It provides a graphical user interface for users to input their credentials and interact with the application.
+ */
 
 public class Authentification {
 
-    public static int WINDOW_WIDTH = 1200;
-    public static int WINDOW_HEIGHT = 800;
+    public static final int WINDOW_WIDTH = 1200;
+    public static final int WINDOW_HEIGHT = 800;
+    public static final int MULTIPLAYER_PORT = 5555;
     public String[] BACKGROUND_PATHS = {"/img.jpg", "/background.jpg", "/backround.jpg"};
     public String[] FONT_FAMILIES = {"Agency FB", "Arial", "Bank Gothic"};
     public Map<String, Color> COLORS = Map.of(
@@ -46,8 +55,21 @@ public class Authentification {
     );
     private Stage primaryStage;
     private GameManager gameManager;
+    private String currentUsername;
+    private ServerSocket serverSocket;
+    private List<String> connectedPlayers = new ArrayList<>();
+    private AtomicBoolean isServer = new AtomicBoolean(false);
+    private AtomicBoolean isClient = new AtomicBoolean(false);
+    private Socket clientSocket;
+    private List<Socket> clientSockets = new ArrayList<>();
+    private List<PrintWriter> clientWriters = new ArrayList<>();
+    private PrintWriter clientOut;
+    private BufferedReader clientIn;
 
-
+    /**
+     * Constructor for the Authentication class
+     * @param primaryStage The main application window
+     */
     public Authentification(Stage primaryStage) {
         if (primaryStage == null) {
             throw new IllegalArgumentException("primaryStage cannot be null");
@@ -56,55 +78,9 @@ public class Authentification {
         this.gameManager = new GameManager();
     }
 
-    private void startMultiplayerGame(Stage gameStage, GameClient gameClient, users user) {
-        Platform.runLater(() -> {
-            try {
-
-                StackPane root = new StackPane();
-                design design = new design();
-
-
-                ImageView background = design.loadBestBackground();
-                design.setupBackgroundImage(background);
-                root.getChildren().add(background);
-
-                Rectangle overlay = design.createOverlay();
-                root.getChildren().add(overlay);
-
-                BorderPane gameLayout = new BorderPane();
-
-                GameManager gameManager = new GameManager();
-                gameManager.setPrimaryStage(gameStage);
-
-
-                Pane gamePane = new Pane();
-                gamePane.setPrefSize(WINDOW_WIDTH, WINDOW_HEIGHT);
-                gameLayout.setCenter(gamePane);
-                GameManager.gamepane = gamePane;
-                root.getChildren().add(gameLayout);
-                Scene gameScene = new Scene(root, WINDOW_WIDTH, WINDOW_HEIGHT);
-                gameStage.setScene(gameScene);
-                gameStage.show();
-                String selectedAircraft = "default";
-                gameManager.startGame(selectedAircraft);
-                gameManager.setupHUD();
-                gameManager.setupControls();
-                gameManager.gameRunning = true;
-                gameManager.startGameThreads();
-
-                System.out.println("Jeu multijoueur démarré avec succès!");
-
-            } catch (Exception e) {
-                e.printStackTrace();
-                MenuManager menuManager = new MenuManager(primaryStage);
-                menuManager.showNotification("Error starting game: " + e.getMessage());
-            }
-        });
-    }
-
-
-
-
+    /**
+     * Displays the sign-in interface
+     */
     public void showSignInScene() {
         VBox loginBox = new VBox(20);
         loginBox.setAlignment(Pos.CENTER);
@@ -119,7 +95,7 @@ public class Authentification {
         design.setupBackgroundImage(background);
         design.animateBackground(background);
         root.getChildren().add(background);
-        Scene loginScene = new Scene(root, 1200, 800);
+        Scene loginScene = new Scene(root, WINDOW_WIDTH, WINDOW_HEIGHT);
         primaryStage.setScene(loginScene);
         Rectangle overlay = design.createOverlay();
         root.getChildren().add(overlay);
@@ -139,18 +115,25 @@ public class Authentification {
 
         Button loginBtn = animation.createActionButton("SIGN IN", "PRIMARY");
         loginBtn.setPrefWidth(200);
-        Button playWithFriendsBtn = animation.createActionButton("PLAY WITH FRIENDS", "SECONDARY");
-        playWithFriendsBtn.setPrefWidth(200);
+
+        // Multiplayer buttons with distinctive styling
+        Button hostGameBtn = animation.createActionButton("HOST MULTIPLAYER", "ACCENT");
+        hostGameBtn.setPrefWidth(200);
+
+        Button joinGameBtn = animation.createActionButton("JOIN MULTIPLAYER", "SECONDARY");
+        joinGameBtn.setPrefWidth(200);
 
         Button backBtn = animation.createActionButton("Return", "DARK");
         backBtn.setPrefWidth(200);
+
+        // Correction for the return button
         backBtn.setOnAction(e -> {
             animation.playButtonPressAnimation(backBtn);
             MenuManager menuManager = new MenuManager(primaryStage);
             menuManager.returnToMenu();
         });
 
-        loginBox.getChildren().addAll(title, usernameField, passwordField, loginBtn, playWithFriendsBtn, backBtn);
+        loginBox.getChildren().addAll(title, usernameField, passwordField, loginBtn, hostGameBtn, joinGameBtn, backBtn);
 
         loginBox.setOpacity(0);
         loginBox.setTranslateY(20);
@@ -159,36 +142,596 @@ public class Authentification {
         animation.animateFormEntrance(loginBox);
 
         loginBtn.setOnAction(e -> {
+            animation.playButtonPressAnimation(loginBtn);
             String username = usernameField.getText();
             String password = passwordField.getText();
             users user = new users();
             boolean isValid = user.verifyUser(username, password);
             MenuManager menuManager = new MenuManager(primaryStage);
             if (isValid) {
+                currentUsername = username; // Store the username
                 menuManager.showNotification("Sign in successful!");
+
+                // We still show the player selection interface for single player mode
                 PlayerSelectionInterface selectionInterface = new PlayerSelectionInterface(primaryStage);
                 selectionInterface.showSelectionInterface();
             } else {
-                menuManager.showNotification("Incorrect username or password or inexistant account (Sign up first)");
+                menuManager.showNotification("Incorrect username or password or non-existent account (Sign up first)");
             }
         });
-        playWithFriendsBtn.setOnAction(e -> {
+
+        // Action for host multiplayer button
+        hostGameBtn.setOnAction(e -> {
+            animation.playButtonPressAnimation(hostGameBtn);
+
+            // Get username from the field, even if not logged in
             String username = usernameField.getText();
-            String password = passwordField.getText();
-            users user = new users();
-            boolean isValid = user.verifyUser(username, password);
+            // Use "Host" as default if no username entered
+            if (username == null || username.trim().isEmpty()) {
+                username = "Host";
+            }
+
+            MenuManager menuManager = new MenuManager(primaryStage);
+            menuManager.showNotification("Creating multiplayer lobby...");
+
+            // Show multiplayer lobby with host capabilities
+            showMultiplayerLobby(username, true);
+        });
+
+        // Action for join multiplayer button
+        joinGameBtn.setOnAction(e -> {
+            animation.playButtonPressAnimation(joinGameBtn);
+
+            // Get username from the field, even if not logged in
+            String username = usernameField.getText();
+            // Use "Player" as default if no username entered
+            if (username == null || username.trim().isEmpty()) {
+                username = "Player";
+            }
+
             MenuManager menuManager = new MenuManager(primaryStage);
 
-            if (isValid) {
-                menuManager.showNotification("Starting multiplayer mode...");
-                showMultiplayerOptions(user);
-            } else {
-                menuManager.showNotification("Please sign in first to play with friends");
-            }
+            // Show join game dialog
+            showJoinGameDialog(username);
         });
     }
 
+    /**
+     * Shows dialog for entering IP address to join a game
+     * @param username The player's username
+     */
+    private void showJoinGameDialog(String username) {
+        VBox dialogBox = new VBox(20);
+        dialogBox.setAlignment(Pos.CENTER);
+        dialogBox.setPadding(new Insets(40));
+        dialogBox.setMaxWidth(400);
+        dialogBox.setMinHeight(300);
+        dialogBox.setStyle("-fx-background-color: rgba(10, 10, 30, 0.9); -fx-background-radius: 15;");
 
+        animation animation = new animation();
+
+        Label title = new Label("JOIN GAME");
+        title.setFont(Font.font(FONT_FAMILIES[0], FontWeight.BOLD, 30));
+        title.setTextFill(COLORS.get("LIGHT"));
+
+        Label ipLabel = new Label("Enter Host IP Address:");
+        ipLabel.setFont(Font.font(FONT_FAMILIES[1], 14));
+        ipLabel.setTextFill(COLORS.get("LIGHT"));
+
+        TextField ipField = animation.createStylizedTextField("127.0.0.1");
+        ipField.setMaxWidth(300);
+
+        Button connectBtn = animation.createActionButton("CONNECT", "SECONDARY");
+        connectBtn.setPrefWidth(150);
+
+        Button cancelBtn = animation.createActionButton("CANCEL", "DARK");
+        cancelBtn.setPrefWidth(150);
+
+        dialogBox.getChildren().addAll(title, ipLabel, ipField, connectBtn, cancelBtn);
+
+        StackPane dialogRoot = new StackPane();
+        Rectangle dimOverlay = new Rectangle(WINDOW_WIDTH, WINDOW_HEIGHT);
+        dimOverlay.setFill(Color.rgb(0, 0, 0, 0.7));
+        dialogRoot.getChildren().addAll(dimOverlay, dialogBox);
+
+        Scene currentScene = primaryStage.getScene();
+        StackPane currentRoot = (StackPane) currentScene.getRoot();
+        currentRoot.getChildren().add(dialogRoot);
+
+        // Set up button actions
+        connectBtn.setOnAction(e -> {
+            animation.playButtonPressAnimation(connectBtn);
+            String ipAddress = ipField.getText().trim();
+
+            if (ipAddress.isEmpty()) {
+                ipAddress = "127.0.0.1"; // Default to localhost
+            }
+
+            // Remove dialog
+            currentRoot.getChildren().remove(dialogRoot);
+
+            // Try to connect to the server
+            connectToServer(ipAddress, username);
+        });
+
+        cancelBtn.setOnAction(e -> {
+            animation.playButtonPressAnimation(cancelBtn);
+            currentRoot.getChildren().remove(dialogRoot);
+        });
+    }
+
+    /**
+     * Connects to a multiplayer server
+     * @param ipAddress The server's IP address
+     * @param username The player's username
+     */
+    private void connectToServer(String ipAddress, String username) {
+        MenuManager menuManager = new MenuManager(primaryStage);
+
+        new Thread(() -> {
+            try {
+                System.out.println("Attempting to connect to host at " + ipAddress + ":" + MULTIPLAYER_PORT);
+                clientSocket = new Socket(ipAddress, MULTIPLAYER_PORT);
+                isClient.set(true);
+
+                // Store communication streams
+                clientOut = new PrintWriter(clientSocket.getOutputStream(), true);
+                clientIn = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+
+                // Send join message to server
+                clientOut.println("CONNECT:" + username);
+
+                // Wait for acknowledgment from server
+                String response = clientIn.readLine();
+
+                if (response != null && response.startsWith("WELCOME")) {
+                    Platform.runLater(() -> {
+                        menuManager.showNotification("Connected to server!");
+                        showMultiplayerLobby(username, false);
+                    });
+
+                    // Start a listener thread for server messages
+                    startServerListener(username);
+                } else {
+                    throw new IOException("Unexpected server response: " + response);
+                }
+            } catch (IOException ex) {
+                Platform.runLater(() -> {
+                    menuManager.showNotification("Failed to connect: " + ex.getMessage());
+                });
+
+                if (clientSocket != null) {
+                    try {
+                        clientSocket.close();
+                    } catch (IOException e) {
+                        // Ignore cleanup errors
+                    }
+                    clientSocket = null;
+                }
+            }
+        }).start();
+    }
+
+    /**
+     * Shows the multiplayer game lobby where players can connect and wait for opponents
+     * @param username The current player's username
+     * @param isHost Whether this player is hosting the game
+     */
+    private void showMultiplayerLobby(String username, boolean isHost) {
+        VBox lobbyBox = new VBox(20);
+        lobbyBox.setAlignment(Pos.CENTER);
+        lobbyBox.setPadding(new Insets(40));
+        lobbyBox.setMaxWidth(600);
+        lobbyBox.setStyle("-fx-background-color: rgba(10, 10, 30, 0.8); -fx-background-radius: 15;");
+
+        design design = new design();
+        animation animation = new animation();
+        StackPane root = new StackPane();
+
+        // Set up background
+        ImageView background = design.loadBestBackground();
+        design.setupBackgroundImage(background);
+        design.animateBackground(background);
+        root.getChildren().add(background);
+
+        Rectangle overlay = design.createOverlay();
+        root.getChildren().add(overlay);
+
+        // Lobby title
+        String titleText = isHost ? "HOST MULTIPLAYER LOBBY" : "MULTIPLAYER LOBBY";
+        Label title = new Label(titleText);
+        title.setFont(Font.font(FONT_FAMILIES[0], FontWeight.EXTRA_BOLD, 42));
+        title.setTextFill(COLORS.get("LIGHT"));
+
+        DropShadow glow = new DropShadow(15, COLORS.get("ACCENT"));
+        glow.setSpread(0.3);
+        Bloom bloom = new Bloom(0.3);
+        title.setEffect(new Blend(BlendMode.SCREEN, bloom, glow));
+        animation.animateTextGlow(title, glow);
+
+        // Welcome message
+        Label welcomeLabel = new Label("Welcome, " + username + "!");
+        welcomeLabel.setFont(Font.font(FONT_FAMILIES[1], FontWeight.BOLD, 20));
+        welcomeLabel.setTextFill(COLORS.get("LIGHT"));
+
+        // Status indicator
+        HBox statusBox = new HBox(10);
+        statusBox.setAlignment(Pos.CENTER);
+        Circle statusIndicator = new Circle(8);
+        statusIndicator.setFill(Color.YELLOW);
+        Label statusLabel = new Label(isHost ? "Waiting for players to join..." : "Waiting for host to start game...");
+        statusLabel.setTextFill(COLORS.get("LIGHT"));
+        statusLabel.setFont(Font.font(FONT_FAMILIES[1], 16));
+        statusBox.getChildren().addAll(statusIndicator, statusLabel);
+
+        // Server information for host
+        VBox serverInfoBox = new VBox(10);
+        serverInfoBox.setAlignment(Pos.CENTER);
+
+        if (isHost) {
+            try {
+                // Start server socket for hosting
+                serverSocket = new ServerSocket(MULTIPLAYER_PORT);
+                isServer.set(true);
+
+                String localIp = InetAddress.getLocalHost().getHostAddress();
+                Label ipLabel = new Label("Your IP Address: " + localIp);
+                ipLabel.setFont(Font.font(FONT_FAMILIES[1], FontWeight.BOLD, 16));
+                ipLabel.setTextFill(COLORS.get("SECONDARY"));
+
+                Label portLabel = new Label("Port: " + MULTIPLAYER_PORT);
+                portLabel.setFont(Font.font(FONT_FAMILIES[1], 14));
+                portLabel.setTextFill(COLORS.get("LIGHT"));
+
+                serverInfoBox.getChildren().addAll(ipLabel, portLabel);
+
+                // Start listening for connections in a background thread
+                startListeningForConnections(statusIndicator, statusLabel);
+
+            } catch (IOException e) {
+                Label errorLabel = new Label("Failed to create server: " + e.getMessage());
+                errorLabel.setTextFill(COLORS.get("DANGER"));
+                serverInfoBox.getChildren().add(errorLabel);
+            }
+        }
+
+        // Player list
+        VBox playerListBox = new VBox(10);
+        playerListBox.setPadding(new Insets(15));
+        playerListBox.setStyle("-fx-background-color: rgba(0, 0, 0, 0.3); -fx-background-radius: 10;");
+        playerListBox.setMaxHeight(200);
+        playerListBox.setMinHeight(200);
+
+        Label playersHeader = new Label("CONNECTED PLAYERS");
+        playersHeader.setFont(Font.font(FONT_FAMILIES[0], FontWeight.BOLD, 18));
+        playersHeader.setTextFill(COLORS.get("LIGHT"));
+
+        ListView<String> playerListView = new ListView<>();
+        playerListView.setStyle("-fx-background-color: transparent; -fx-control-inner-background: rgba(0, 0, 0, 0.5);");
+        playerListView.getItems().add(username + " (You)");
+        connectedPlayers.add(username);
+
+        if (!isHost && isClient.get()) {
+            // If we're a client who just connected to a host
+            playerListView.getItems().add("Host (Waiting...)");
+        }
+
+        playerListView.setPrefHeight(150);
+        playerListBox.getChildren().addAll(playersHeader, playerListView);
+
+        // Action buttons
+        HBox buttonBox = new HBox(20);
+        buttonBox.setAlignment(Pos.CENTER);
+
+        Button startGameBtn = animation.createActionButton("START GAME", "SECONDARY");
+        startGameBtn.setPrefWidth(150);
+        // Only the host can start the game
+        startGameBtn.setDisable(false);
+// Change text for client
+        if (!isHost) {
+            startGameBtn.setText("READY TO PLAY");
+        }
+
+
+
+        Button selectAircraftBtn = animation.createActionButton("SELECT AIRCRAFT", "PRIMARY");
+        selectAircraftBtn.setPrefWidth(150);
+
+        Button backBtn = animation.createActionButton("BACK", "DARK");
+        backBtn.setPrefWidth(150);
+
+        buttonBox.getChildren().addAll(startGameBtn, selectAircraftBtn, backBtn);
+
+        // Player count indicator
+        Label playerCountLabel = new Label("Players: 1/2");
+        playerCountLabel.setFont(Font.font(FONT_FAMILIES[1], FontWeight.BOLD, 16));
+        playerCountLabel.setTextFill(COLORS.get("LIGHT"));
+
+        // Add all elements to lobby container
+        lobbyBox.getChildren().addAll(title, welcomeLabel);
+
+        if (isHost) {
+            lobbyBox.getChildren().add(serverInfoBox);
+        }
+
+        lobbyBox.getChildren().addAll(statusBox, playerCountLabel, playerListBox, buttonBox);
+
+        // Initial animation
+        lobbyBox.setOpacity(0);
+        lobbyBox.setTranslateY(20);
+        root.getChildren().add(lobbyBox);
+
+        Scene lobbyScene = new Scene(root, WINDOW_WIDTH, WINDOW_HEIGHT);
+        primaryStage.setScene(lobbyScene);
+
+        animation.animateFormEntrance(lobbyBox);
+
+        // Button actions
+        // Fix for the startGameBtn action in Authentification.java (showMultiplayerLobby method)
+        startGameBtn.setOnAction(e -> {
+            animation.playButtonPressAnimation(startGameBtn);
+
+            if (isHost) {
+                // Host functionality: Start the server-side game and notify clients
+                MultiplayerManager multiplayerManager = new MultiplayerManager(primaryStage, username);
+                multiplayerManager.setAsHost(serverSocket);
+
+                // Notify all clients that game is starting - ensure clean message delivery
+                for (PrintWriter writer : clientWriters) {
+                    if (writer != null) {
+                        writer.println("START_GAME");
+                        writer.flush(); // Ensure immediate sending
+                        System.out.println("START_GAME message sent to client");
+                    }
+                }
+
+                // Add a small delay to ensure messages are sent before starting the game
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException ex) {
+                    ex.printStackTrace();
+                }
+
+                // Start the game for host
+                multiplayerManager.startMultiplayerGame();
+            } else {
+                // Client functionality: Show that client is ready
+                startGameBtn.setDisable(true);
+                startGameBtn.setText("WAITING FOR HOST...");
+                statusLabel.setText("Ready! Waiting for host to start the game.");
+                statusIndicator.setFill(Color.GREEN);
+
+                // Notify host that client is ready
+                if (clientSocket != null && clientOut != null) {
+                    clientOut.println("CLIENT_READY:" + username);
+                    System.out.println("Sent CLIENT_READY:" + username);
+                    // Flush to ensure message is sent
+                    clientOut.flush();
+                }
+            }
+        });
+        selectAircraftBtn.setOnAction(e -> {
+            animation.playButtonPressAnimation(selectAircraftBtn);
+
+            // Clean up resources when navigating away
+            cleanupNetworkResources();
+
+            PlayerSelectionInterface selectionInterface = new PlayerSelectionInterface(primaryStage);
+            selectionInterface.showSelectionInterface();
+        });
+
+        backBtn.setOnAction(e -> {
+            animation.playButtonPressAnimation(backBtn);
+
+            // Clean up resources when going back
+            cleanupNetworkResources();
+
+            showSignInScene();
+        });
+
+        // Make sure resources are cleaned up when window is closed
+        primaryStage.setOnCloseRequest(windowEvent -> {
+            cleanupNetworkResources();
+        });
+    }
+    private void notifyClientsGameStarting(List<PrintWriter> clientWriters) {
+        try {
+            if (isServer.get() && !clientWriters.isEmpty()) {
+                System.out.println("Notifying " + clientWriters.size() + " clients that game is starting...");
+
+                for (PrintWriter writer : clientWriters) {
+                    if (writer != null) {
+                        writer.println("START_GAME");
+                        writer.flush(); // Make sure the message is sent immediately
+                        System.out.println("START_GAME message sent to client");
+                    }
+                }
+            }
+        } catch (Exception ex) {
+            System.err.println("Error notifying clients: " + ex.getMessage());
+            ex.printStackTrace();
+        }
+    }
+
+    /**
+     * Starts listening for client connections in a background thread
+     * @param statusIndicator The UI indicator showing connection status
+     * @param statusLabel The UI label showing connection status text
+     */
+    private void startListeningForConnections(Circle statusIndicator, Label statusLabel) {
+        if (serverSocket == null || !isServer.get()) {
+            return;
+        }
+
+        // Start a background thread to listen for connections
+        new Thread(() -> {
+            try {
+                // Update UI to show we're listening
+                Platform.runLater(() -> {
+                    statusIndicator.setFill(Color.YELLOW);
+                    statusLabel.setText("Waiting for opponent to connect...");
+                });
+
+                System.out.println("Server listening on port " + MULTIPLAYER_PORT);
+
+                // Keep accepting connections until server is stopped
+                while (!serverSocket.isClosed()) {
+                    try {
+                        // Wait for a client to connect (blocks until connection)
+                        Socket clientSocket = serverSocket.accept();
+                        System.out.println("Client connected from: " + clientSocket.getInetAddress());
+
+                        // Set up communication channels
+                        PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true);
+                        BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+
+                        // Add to our collections
+                        clientSockets.add(clientSocket);
+                        clientWriters.add(out);
+
+                        // Wait for client identification
+                        String clientMessage = in.readLine();
+                        String clientUsername = "Unknown";
+
+                        if (clientMessage != null && clientMessage.startsWith("CONNECT:")) {
+                            clientUsername = clientMessage.substring(8);
+                            System.out.println("Client identified as: " + clientUsername);
+
+                            // Send welcome message
+                            out.println("WELCOME:" + clientUsername);
+                        }
+
+                        // Store final username for UI updates
+                        final String finalUsername = clientUsername;
+
+                        // Update UI when client connects
+                        Platform.runLater(() -> {
+                            statusIndicator.setFill(Color.GREEN);
+                            statusLabel.setText("Player connected! Ready to start");
+
+                            // Update player list
+                            ListView<String> playerList = findPlayerListView();
+                            if (playerList != null) {
+                                playerList.getItems().add(finalUsername);
+                                connectedPlayers.add(finalUsername);
+                            }
+
+                            // Update player count
+                            findPlayerCountLabel().setText("Players: " + (connectedPlayers.size()) + "/2");
+                        });
+
+                        // Start a new thread to listen for messages from this client
+                        startClientListener(clientSocket, in, finalUsername);
+                    } catch (IOException e) {
+                        if (!serverSocket.isClosed()) {
+                            System.err.println("Error accepting client: " + e.getMessage());
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                if (!serverSocket.isClosed()) {
+                    System.err.println("Server error: " + e.getMessage());
+                    Platform.runLater(() -> {
+                        statusIndicator.setFill(Color.RED);
+                        statusLabel.setText("Connection error: " + e.getMessage());
+                    });
+                }
+            }
+        }).start();
+    }
+    private void startClientListener(Socket clientSocket, BufferedReader in, String username) {
+        new Thread(() -> {
+            try {
+                String message;
+                while ((message = in.readLine()) != null) {
+                    System.out.println("Message from " + username + ": " + message);
+
+                    // Handle client messages
+                    if (message.startsWith("CLIENT_READY:")) {
+                        final String readyPlayer = message.substring(13);
+                        Platform.runLater(() -> {
+                            // Update UI to show player is ready
+                            ListView<String> playerList = findPlayerListView();
+                            if (playerList != null) {
+                                for (int i = 0; i < playerList.getItems().size(); i++) {
+                                    if (playerList.getItems().get(i).startsWith(readyPlayer)) {
+                                        playerList.getItems().set(i, readyPlayer + " (Ready)");
+                                        break;
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
+            } catch (IOException e) {
+                System.err.println("Error reading from client " + username + ": " + e.getMessage());
+            }
+        }).start();
+    }
+    /**
+     * Utility method to find the player list view in the current scene
+     * @return The ListView for player names
+     */
+    private ListView<String> findPlayerListView() {
+        Scene currentScene = primaryStage.getScene();
+        if (currentScene == null) return null;
+
+        // Find the ListView in the scene graph
+        for (Node node : currentScene.getRoot().lookupAll(".list-view")) {
+            if (node instanceof ListView) {
+                return (ListView<String>) node;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Utility method to find the player count label in the current scene
+     * @return The Label showing player count
+     */
+    private Label findPlayerCountLabel() {
+        Scene currentScene = primaryStage.getScene();
+        if (currentScene == null) return null;
+
+        // Find all labels in the scene
+        for (Node node : currentScene.getRoot().lookupAll(".label")) {
+            if (node instanceof Label && ((Label) node).getText().startsWith("Players:")) {
+                return (Label) node;
+            }
+        }
+
+        // Default label if not found
+        return new Label("Players: 1/2");
+    }
+
+    /**
+     * Cleans up network resources when leaving the multiplayer screens
+     */
+    private void cleanupNetworkResources() {
+        if (isServer.get() && serverSocket != null && !serverSocket.isClosed()) {
+            try {
+                serverSocket.close();
+            } catch (IOException ex) {
+                System.err.println("Error closing server socket: " + ex.getMessage());
+            }
+        }
+
+        if (isClient.get() && clientSocket != null && !clientSocket.isClosed()) {
+            try {
+                clientSocket.close();
+            } catch (IOException ex) {
+                System.err.println("Error closing client socket: " + ex.getMessage());
+            }
+        }
+
+        // Reset flags
+        isServer.set(false);
+        isClient.set(false);
+    }
+
+    /**
+     * Displays the sign-up interface
+     */
     public void showSignUpScene() {
         VBox signupBox = new VBox(20);
         signupBox.setAlignment(Pos.CENTER);
@@ -222,6 +765,8 @@ public class Authentification {
         Button signupBtn = animation.createActionButton("SIGN UP", "ACCENT");
         signupBtn.setPrefWidth(200);
         MenuManager menuManager = new MenuManager(primaryStage);
+
+        // Input validation and registration
         signupBtn.setOnAction(e -> {
             animation.playButtonPressAnimation(signupBtn);
 
@@ -241,11 +786,13 @@ public class Authentification {
                 menuManager.showNotification("Username already exists. Please choose another one.");
                 return;
             } else {
-                System.out.println("Tentative d'inscription avec :" + username + " et " + password);
+                System.out.println("Registration attempt with: " + username);
 
                 newUser.addUser(newUser);
 
                 menuManager.showNotification("Account created successfully!");
+                // Store username for possible multiplayer use
+                currentUsername = username;
                 PlayerSelectionInterface selectionInterface = new PlayerSelectionInterface(primaryStage);
                 selectionInterface.showSelectionInterface();
             }
@@ -253,6 +800,8 @@ public class Authentification {
 
         Button backBtn = animation.createActionButton("Return", "DARK");
         backBtn.setPrefWidth(200);
+
+        // Correction for the return button
         backBtn.setOnAction(e -> {
             animation.playButtonPressAnimation(backBtn);
             menuManager.returnToMenu();
@@ -269,229 +818,66 @@ public class Authentification {
 
         animation.animateFormEntrance(signupBox);
     }
-
-    private void joinGameServer(users user, String serverAddress) {
-        Thread clientThread = new Thread(() -> {
+    // Fix for the client message listener method in Authentification.java
+    private void startServerListener(String username) {
+        new Thread(() -> {
             try {
-                // Create a new stage for the game
-                Platform.runLater(() -> {
-                    Stage gameStage = new Stage();
-                    gameStage.setTitle("Jet Fighters Multiplayer - " + user.getUsername());
+                String message = "";
+                System.out.println("Client started listening for server messages");
 
-                    // Initialize game UI and components
-                    StackPane root = new StackPane();
-                    design design = new design();
+                while (clientSocket != null && !clientSocket.isClosed()) {
+                    try {
+                        // Check if there's data available to read
+                        if (clientIn.ready() || (message = clientIn.readLine()) != null) {
+                            if (message == null) {
+                                // If ready() was true but readLine() returned null,
+                                // try again in the next iteration
+                                Thread.sleep(100);
+                                continue;
+                            }
 
-                    ImageView background = design.loadBestBackground();
-                    design.setupBackgroundImage(background);
-                    root.getChildren().add(background);
+                            System.out.println("Message from server: " + message);
 
-                    Rectangle overlay = design.createOverlay();
-                    root.getChildren().add(overlay);
+                            // Handle different message types
+                            if (message.equals("START_GAME")) {
+                                // When host starts the game, start game for client too
+                                Platform.runLater(() -> {
+                                    System.out.println("Received START_GAME command from host!");
+                                    try {
+                                        // Create and configure the multiplayer manager
+                                        MultiplayerManager multiplayerManager = new MultiplayerManager(primaryStage, username);
+                                        multiplayerManager.setAsClient(clientSocket);
 
-                    BorderPane gameLayout = new BorderPane();
-
-                    GameManager gameManager = new GameManager();
-                    gameManager.setPrimaryStage(gameStage);
-
-                    Pane gamePane = new Pane();
-                    gamePane.setPrefSize(WINDOW_WIDTH, WINDOW_HEIGHT);
-                    gameLayout.setCenter(gamePane);
-                    GameManager.gamepane = gamePane;
-                    root.getChildren().add(gameLayout);
-
-                    Scene gameScene = new Scene(root, WINDOW_WIDTH, WINDOW_HEIGHT);
-                    gameStage.setScene(gameScene);
-                    gameStage.show();
-
-                    // Initialize game client with user credentials
-                    GameClient gameClient = new GameClient(user.getUsername(), serverAddress, gameManager);
-
-                    // Start the game with default aircraft
-                    String selectedAircraft = "default";
-                    gameManager.startGame(selectedAircraft);
-                    gameManager.setupHUD();
-                    gameManager.setupControls();
-                    gameManager.gameRunning = true;
-                    gameManager.startGameThreads();
-
-                    // Display connecting message
-                    MenuManager menuManager = new MenuManager(primaryStage);
-                    menuManager.showNotification("Connected to game server at " + serverAddress);
-                });
-            } catch (Exception e) {
-                Platform.runLater(() -> {
-                    MenuManager menuManager = new MenuManager(primaryStage);
-                    menuManager.showNotification("Error connecting to server: " + e.getMessage());
-                });
-                e.printStackTrace();
-            }
-        });
-        clientThread.setDaemon(true);
-        clientThread.start();
-    }
-    private void startGameServer(users user) {
-        Thread serverThread = new Thread(() -> {
-            try {
-                ServerSocket serverSocket = null;
-                try {
-                    serverSocket = new ServerSocket(7103);
-                    final ServerSocket finalServerSocket = serverSocket;
-
-                    Platform.runLater(() -> {
-                        MenuManager menuManager = new MenuManager(primaryStage);
-                        menuManager.showNotification("Game server started on port 7103");
-                    });
-
-                    GameServer server = new GameServer(finalServerSocket);
-                    server.startServer();
-                } catch (java.net.BindException e) {
-                    Platform.runLater(() -> {
-                        MenuManager menuManager = new MenuManager(primaryStage);
-                        menuManager.showNotification("Port 7103 is already in use. Server cannot start.");
-                    });
-                    e.printStackTrace();
-                    return;
+                                        // Start the multiplayer game
+                                        multiplayerManager.startMultiplayerGame();
+                                    } catch (Exception ex) {
+                                        System.err.println("Error starting client game: " + ex.getMessage());
+                                        ex.printStackTrace();
+                                    }
+                                });
+                                // Break out of the loop after receiving START_GAME
+                                // The game will handle communication from now on
+                                break;
+                            }
+                        } else {
+                            // No data available, sleep briefly to avoid CPU hogging
+                            Thread.sleep(100);
+                        }
+                    } catch (InterruptedException iex) {
+                        // Thread interrupted, just continue
+                        continue;
+                    }
                 }
             } catch (IOException e) {
-                Platform.runLater(() -> {
-                    MenuManager menuManager = new MenuManager(primaryStage);
-                    menuManager.showNotification("Error starting server: " + e.getMessage());
-                });
-                e.printStackTrace();
-            }
-        });
-        serverThread.setDaemon(true);
-        serverThread.start();
-        try {
-            Thread.sleep(1000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
+                if (clientSocket != null && !clientSocket.isClosed()) {
+                    System.err.println("Error reading from server: " + e.getMessage());
 
-        joinGameServer(user, "localhost");
-    }
-    private void showMultiplayerOptions(users user) {
-        VBox optionsBox = new VBox(20);
-        optionsBox.setAlignment(Pos.CENTER);
-        optionsBox.setPadding(new Insets(40));
-        optionsBox.setMaxWidth(500);
-        optionsBox.setStyle("-fx-background-color: rgba(10, 10, 30, 0.8); -fx-background-radius: 15;");
-
-        Label title = new Label("MULTIPLAYER OPTIONS");
-        title.setFont(Font.font(FONT_FAMILIES[0], FontWeight.BOLD, 36));
-        title.setTextFill(COLORS.get("LIGHT"));
-
-        animation animation = new animation();
-
-        Button hostGameBtn = animation.createActionButton("HOST GAME", "PRIMARY");
-        hostGameBtn.setPrefWidth(300);
-
-        Button joinGameBtn = animation.createActionButton("JOIN GAME", "SECONDARY");
-        joinGameBtn.setPrefWidth(300);
-
-        Label statusLabel = new Label("");
-        statusLabel.setFont(Font.font(FONT_FAMILIES[0], FontWeight.NORMAL, 14));
-        statusLabel.setTextFill(COLORS.get("LIGHT"));
-        statusLabel.setVisible(false);
-
-        TextField serverAddressField = animation.createStylizedTextField("Server address (default: localhost)");
-        serverAddressField.setText("localhost");  // Default value
-        serverAddressField.setVisible(false);
-
-        Button backBtn = animation.createActionButton("BACK", "DARK");
-        backBtn.setPrefWidth(300);
-
-        optionsBox.getChildren().addAll(title, hostGameBtn, joinGameBtn, serverAddressField, statusLabel, backBtn);
-        Stage optionsStage = new Stage();
-        optionsStage.setTitle("Multiplayer Options");
-        StackPane root = new StackPane();
-
-        design design = new design();
-        ImageView background = design.loadBestBackground();
-        design.setupBackgroundImage(background);
-        root.getChildren().add(background);
-
-        Rectangle overlay = design.createOverlay();
-        root.getChildren().add(overlay);
-
-        root.getChildren().add(optionsBox);
-
-        Scene optionsScene = new Scene(root, 800, 600);
-        optionsStage.setScene(optionsScene);
-        optionsStage.show();
-
-        hostGameBtn.setOnAction(e -> {
-            statusLabel.setText("Starting server...");
-            statusLabel.setVisible(true);
-            hostGameBtn.setDisable(true);
-            joinGameBtn.setDisable(true);
-
-            new Thread(() -> {
-                try {
-                    Thread.sleep(500);
                     Platform.runLater(() -> {
-                        optionsStage.close();
-                        startGameServer(user);
+                        MenuManager menuManager = new MenuManager(primaryStage);
+                        menuManager.showNotification("Lost connection to host!");
                     });
-                } catch (InterruptedException ex) {
-                    ex.printStackTrace();
                 }
-            }).start();
-        });
-
-        joinGameBtn.setOnAction(e -> {
-            if (!serverAddressField.isVisible()) {
-                serverAddressField.setVisible(true);
-                statusLabel.setVisible(true);
-                statusLabel.setText("Enter server address and click JOIN GAME again");
-            } else {
-                String serverAddress = serverAddressField.getText().trim();
-                if (serverAddress.isEmpty()) {
-                    serverAddress = "localhost";
-                }
-                statusLabel.setText("Connecting to " + serverAddress + "...");
-                final String finalServerAddress = serverAddress;
-
-                joinGameBtn.setDisable(true);
-
-                // Use a timer to provide feedback while connecting
-                new Thread(() -> {
-                    try {
-                        Thread.sleep(500);
-                        Platform.runLater(() -> {
-                            optionsStage.close();
-                            joinGameServer(user, finalServerAddress);
-                        });
-                    } catch (InterruptedException ex) {
-                        ex.printStackTrace();
-                    }
-                }).start();
             }
-        });
-
-        backBtn.setOnAction(e -> {
-            optionsStage.close();
-        });
-    }
-
-    // 4. New method: Check if a server is running locally
-    private boolean isLocalServerRunning() {
-        try {
-            Socket socket = new Socket();
-            socket.connect(new InetSocketAddress("localhost", 7103), 300);
-            socket.close();
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    private String getLocalIPAddress() {
-        try {
-            return java.net.InetAddress.getLocalHost().getHostAddress();
-        } catch (java.net.UnknownHostException e) {
-            return "localhost";
-        }
+        }).start();
     }
 }

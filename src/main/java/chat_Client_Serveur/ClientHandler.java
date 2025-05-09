@@ -1,136 +1,114 @@
 package chat_Client_Serveur;
 
 import java.io.*;
-import java.net.Socket;
-import java.util.ArrayList;
-import java.util.stream.Collectors;
+import java.net.*;
 
-//it is runned by the thread so we don't have a main methode in here
 public class ClientHandler implements Runnable {
-    //list of clients : keep track of all our clients so whenever a client sends a mssg we can loop through our arraylist and send the mssg to each client
-    //broadcast a mssg to multiple clients instead of just one or just the server
-    //static because we want it to belong to the class not every object of the class
-    private static ArrayList<ClientHandler> clientHandlers = new ArrayList<>();
-    //socket used to establish the cnx between the client and the server
     private Socket socket;
-    //read data ; mssgs that have been sent from the client
-    private BufferedReader bufferedReader;
-    //send data ; mssgs to our client
-    private BufferedWriter bufferedWriter;
-    private String ClientUserName;
+    private String clientId;
+    private GameServer server;
+    private BufferedReader in;
+    private PrintWriter out;
+    private boolean running = false;
 
-    //constructeur
-    public ClientHandler(Socket socket) {
-        try {
-            this.socket = socket;
-            //we wrapp our output stream(our byte stream) in a char stream because we want to send over chars
-            //this is what are we're gonna use to send
-            this.bufferedWriter = new BufferedWriter( new OutputStreamWriter(socket.getOutputStream()));//char streams ends with writer and byte stream ends with stream
-            this.bufferedReader = new BufferedReader(new InputStreamReader(socket.getInputStream()));//this is what our client is sending
-            this.ClientUserName = bufferedReader.readLine();
-            clientHandlers.add(this);
-            broadcastMssg("Server: " +ClientUserName + " has entered the chat !");
-        }catch (IOException e){
-            closeEverything(socket,bufferedReader,bufferedWriter);
-        }
+    public ClientHandler(Socket socket, String clientId, GameServer server) {
+        this.socket = socket;
+        this.clientId = clientId;
+        this.server = server;
     }
-    //everything in this run methode is what is run in a separate thread
-    //separate thread :  listen to mssgs wich is a blocking operation(prog stuck til the operation is completed)
+
+    public ClientHandler(Socket socket) {
+    }
+
     @Override
     public void run() {
-        //hold a mssg received from a client
-        String mssgFromClient;
-        //while we're connected to a client let's listen for mssgs
-        while (socket.isConnected()) {
-            //read from our bufferedReader
-            try {
-                //prog will hold here til we receive a mssg from a client
-                //we want to run this on a separate thread so the rest of our game isn't stopped by this line (blocking operation)
-                //pour que le programme fait la difference entre un mssg privé et autre
-                mssgFromClient = bufferedReader.readLine();
-                if (mssgFromClient != null) {
-                    if (mssgFromClient.startsWith("/pm")) {
-                        sendPrivateMssg(mssgFromClient);
-                    }else if (mssgFromClient.startsWith("/list")) {
-                        try {
-                            // Envoyer la réponse UNIQUEMENT au client demandeur
-                            bufferedWriter.write("Connected players: " + getConnectedUsers()); // Pas d'espace avant ":"
-                            bufferedWriter.newLine();
-                            bufferedWriter.flush();
-                        } catch (IOException ex) {
-                            closeEverything(socket, bufferedReader, bufferedWriter);
-                        }
-                    }else {
-                        broadcastMssg(mssgFromClient);
-                    }
-                }
-            }catch (IOException e){
-                closeEverything(socket,bufferedReader,bufferedWriter);
-                //when the client disconnects this will break us out of the while loop
-                break;
-            }
-        }
-
-    }
-    public void broadcastMssg(String mssg){
-        for (ClientHandler clientHandler : clientHandlers) {
-            try {
-                //we want to broadcast the mssg to everyone except the user who sent it
-                if (!clientHandler.ClientUserName.equals(ClientUserName)) {
-                    clientHandler.bufferedWriter.write(mssg);
-                    //send over a new line char
-                    clientHandler.bufferedWriter.newLine();
-                    //flush our bufferedWriter:buffer needs to be full before it is sent and the mssg maybe will be too short for filling it so we have to flush manually
-                    clientHandler.bufferedWriter.flush();
-                }
-            }catch (IOException e){
-                closeEverything(socket,bufferedReader,bufferedWriter);
-            }
-        }
-    }
-    //methode to signal that a user left the chat : user disconnected
-    public void removeClientHandler(){
-        //remove the clienthandler from the arraylist
-        clientHandlers.remove(this);
-        broadcastMssg("Server: " +ClientUserName + " has left the chat !");
-    }
-    public void closeEverything(Socket socket, BufferedReader bufferedReader, BufferedWriter bufferedWriter){
-        removeClientHandler();
         try {
-            if (bufferedReader != null) {
-                bufferedReader.close();
+            in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            out = new PrintWriter(socket.getOutputStream(), true);
+
+            // Envoyer l'ID du client
+            sendMessage("INIT|" + clientId);
+
+            running = true;
+            String message;
+
+            while (running && (message = in.readLine()) != null) {
+                processMessage(message);
             }
-            if (bufferedWriter != null) {
-                bufferedWriter.close();
-            }
-            if (socket != null) {
-                socket.close();
-            }
-        }catch (IOException e){
-            e.printStackTrace();
+        } catch (IOException e) {
+            System.err.println("Error handling client " + clientId + ": " + e.getMessage());
+        } finally {
+            cleanup();
         }
     }
-    //methode pour les mssgs privé
-    public void sendPrivateMssg(String mssg){
-        String[] parts = mssg.split(" ", 3); // "/pm" , "UserName" , "Mssg"
-        String recipient = parts[1];
-        String privateMssg = parts[2];
-        for (ClientHandler client : clientHandlers) {
-            if (client.ClientUserName.equals(recipient)){
-                try {
-                    client.bufferedWriter.write("[Private] " + ClientUserName + " : " + privateMssg);
-                    client.bufferedWriter.newLine();
-                    client.bufferedWriter.flush();
-                }catch (IOException e){
-                    closeEverything(socket,bufferedReader,bufferedWriter);
+
+    private void processMessage(String message) {
+        String[] parts = message.split("\\|");
+        String command = parts[0];
+
+        switch (command) {
+            case "REGISTER":
+                // Format: REGISTER|aircraft|x|y
+                if (parts.length >= 4) {
+                    String aircraft = parts[1];
+                    double x = Double.parseDouble(parts[2]);
+                    double y = Double.parseDouble(parts[3]);
+                    server.registerPlayer(clientId, aircraft, x, y);
                 }
-            }
+                break;
+
+            case "MOVE":
+                // Format: MOVE|x|y
+                if (parts.length >= 3) {
+                    double x = Double.parseDouble(parts[1]);
+                    double y = Double.parseDouble(parts[2]);
+                    server.updatePlayerPosition(clientId, x, y);
+                }
+                break;
+
+            case "SHOT":
+                // Format: SHOT|x|y
+                if (parts.length >= 3) {
+                    double x = Double.parseDouble(parts[1]);
+                    double y = Double.parseDouble(parts[2]);
+                    server.handlePlayerShot(clientId, x, y);
+                }
+                break;
+
+            case "ENEMY_HIT":
+                // Format: ENEMY_HIT|enemyId
+                if (parts.length >= 2) {
+                    int enemyId = Integer.parseInt(parts[1]);
+                    server.handleEnemyHit(clientId, enemyId);
+                }
+                break;
+
+            case "CHAT":
+                // Format: CHAT|message
+                if (parts.length >= 2) {
+                    String chatMessage = parts[1];
+                    server.handleChatMessage(clientId, chatMessage);
+                }
+                break;
         }
     }
-    //pour que le client peut avoir la liste des utilisateurs connectés au chat
-    public static String getConnectedUsers(){
-        return clientHandlers.stream()
-                .map(client -> client.ClientUserName)
-                .collect(Collectors.joining(", "));
+
+    public void sendMessage(String message) {
+        if (out != null) {
+            out.println(message);
+        }
+    }
+
+    private void cleanup() {
+        running = false;
+        server.removeClient(clientId);
+
+        try {
+            if (in != null) in.close();
+            if (out != null) out.close();
+            if (socket != null) socket.close();
+        } catch (IOException e) {
+            System.err.println("Error closing connection: " + e.getMessage());
+        }
     }
 }

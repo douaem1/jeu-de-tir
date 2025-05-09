@@ -2,7 +2,8 @@
 package design;
 
 import Game.GameManager;
-import javafx.animation.ScaleTransition;
+
+import javafx.animation.*;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -24,9 +25,10 @@ public class HUD {
         this.gameManager = null;
     }
 
-    public HUD(GameManager gameManager) {
-        this.gameManager = gameManager;
-    }
+
+
+
+
 
     public void setupHUD() {
         hudContainer = new BorderPane();
@@ -55,9 +57,10 @@ public class HUD {
     }
 
     //  mettre à jour le score
-    public void updateScore(int newScore) {
+    public void updateScore() {
         if (scoreLabel != null) {
             Platform.runLater(() -> {
+                int newScore = gameManager.score;
                 scoreLabel.setText("SCORE: " + newScore);
                 System.out.println("HUD mis à jour avec score: " + newScore);
             });
@@ -103,9 +106,9 @@ public class HUD {
     }
     public void updateHUD() {
         if (gameManager != null) {
-            updateScore(gameManager.score);
+            updateScore();
             updateLives(gameManager.lives);
-            updateLevel(gameManager.currentLevel);
+         //   updateLevel(gameManager.currentLevel);
         }
     }
 
@@ -113,6 +116,66 @@ public class HUD {
         Platform.runLater(() -> {
             livesLabel.setText("VIES: " + newValue);
         });
+    }
+    /**
+     * Méthodes à ajouter à votre classe HUD pour gérer l'indicateur de mode multijoueur
+     */
+
+// Attribut à ajouter à la classe HUD
+    private Label multiplayerIndicator;
+
+    /**
+     * Crée et affiche l'indicateur de mode multijoueur dans le HUD.
+     */
+    public void showMultiplayerIndicator() {
+        if (multiplayerIndicator == null) {
+            multiplayerIndicator = new Label("MULTIPLAYER");
+            multiplayerIndicator.setTextFill(Color.YELLOW);
+            multiplayerIndicator.setFont(Font.font("Arial", FontWeight.BOLD, 16));
+            multiplayerIndicator.setPadding(new Insets(5, 10, 5, 10));
+            multiplayerIndicator.setStyle("-fx-background-color: rgba(0, 0, 0, 0.5); -fx-background-radius: 5;");
+
+            // Positionner l'indicateur en haut à droite de l'écran
+            StackPane.setAlignment(multiplayerIndicator, Pos.TOP_RIGHT);
+            StackPane.setMargin(multiplayerIndicator, new Insets(10, 10, 0, 0));
+
+            // Ajouter un effet de pulsation pour attirer l'attention
+            Timeline pulse = new Timeline(
+                    new KeyFrame(Duration.ZERO, new KeyValue(multiplayerIndicator.opacityProperty(), 1.0)),
+                    new KeyFrame(Duration.seconds(1), new KeyValue(multiplayerIndicator.opacityProperty(), 0.6)),
+                    new KeyFrame(Duration.seconds(2), new KeyValue(multiplayerIndicator.opacityProperty(), 1.0))
+            );
+            pulse.setCycleCount(Animation.INDEFINITE);
+            pulse.play();
+        }
+
+        // S'assurer que l'indicateur est visible et ajouté au HUD
+
+        if (hudContainer != null && hudContainer.getChildren().contains(multiplayerIndicator) == false) {
+            ((Pane) hudContainer.getCenter()).getChildren().add(multiplayerIndicator);
+        }
+
+        multiplayerIndicator.setVisible(true);
+    }
+
+    /**
+     * Cache l'indicateur de mode multijoueur dans le HUD.
+     */
+    public void hideMultiplayerIndicator() {
+        if (multiplayerIndicator != null) {
+            multiplayerIndicator.setVisible(false);
+        }
+    }
+
+    /**
+     * Méthode pour afficher des informations sur les joueurs connectés
+     *
+     * @param connectedPlayers nombre de joueurs connectés
+     */
+    public void updateMultiplayerStatus(int connectedPlayers) {
+        if (multiplayerIndicator != null) {
+            multiplayerIndicator.setText("MULTIPLAYER (" + connectedPlayers + ")");
+        }
     }
 
 }

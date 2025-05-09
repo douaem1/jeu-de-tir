@@ -11,13 +11,17 @@ import javafx.scene.effect.Blend;
 import javafx.scene.effect.BlendMode;
 import javafx.scene.effect.Bloom;
 import javafx.scene.effect.DropShadow;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 import Game.GameManager;
+import design.design;
+import design.animation;
 
 
 public class MenuManager {
@@ -47,6 +51,9 @@ public class MenuManager {
 
         container.getChildren().addAll(title, subtitle, actionButtons);
         animateMenuEntrance(container);
+
+        Button multiplayerButton = animation.createActionButton("MULTIPLAYER", "ACCENT");
+        multiplayerButton.setOnAction(e -> openMultiplayerMenu());
 
         return container;
     }
@@ -232,4 +239,50 @@ public class MenuManager {
         gamemanager.stopGame();
         gamemanager.setupMainMenu();
     }
+    // Modifications for MenuManager.java class
+// Add this method to the MenuManager class
+
+    /**
+     * Opens the multiplayer lobby menu
+     */
+    public void openMultiplayerMenu() {
+        try {
+            // Create a new container
+            StackPane root = new StackPane();
+            design design = new design();
+
+            // Load background
+            ImageView background = design.loadBestBackground();
+            root.getChildren().add(background);
+            design.animateBackground(background);
+
+            // Add overlay with gradient effect
+            Rectangle overlay = design.createOverlay();
+            root.getChildren().add(overlay);
+
+            // Add particle effect for visual enhancement
+            root.getChildren().add(design.createParticleEffect());
+
+            // Create multiplayer lobby interface
+            MultiplayerIntegration multiplayerIntegration = new MultiplayerIntegration(primaryStage, this);
+            VBox multiplayerLobby = multiplayerIntegration.createMultiplayerLobby();
+
+            // Center the multiplayer lobby
+            StackPane.setAlignment(multiplayerLobby, Pos.CENTER);
+            root.getChildren().add(multiplayerLobby);
+
+            // Create and apply scene
+            Scene scene = new Scene(root, GameManager.WINDOW_WIDTH, GameManager.WINDOW_HEIGHT);
+            primaryStage.setScene(scene);
+            primaryStage.show();
+
+            System.out.println("Multiplayer menu opened successfully");
+        } catch (Exception e) {
+            System.err.println("Error opening multiplayer menu: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+
+
 }
