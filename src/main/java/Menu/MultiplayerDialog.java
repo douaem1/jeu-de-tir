@@ -143,10 +143,7 @@ public class MultiplayerDialog {
             String hostIP = result.get();
             MultiplayerManager multiplayerManager = new MultiplayerManager(primaryStage, "Client");
             multiplayerManager.setAsClient(new Socket(hostIP, GameConstants.PORT));
-            PlayWithFriendsDialog playDialog = new PlayWithFriendsDialog(primaryStage, () -> {
-                multiplayerManager.startMultiplayerGame();
-            });
-            playDialog.show();
+            multiplayerManager.startMultiplayerGame();
             dialog.close();
         }
     }
