@@ -19,6 +19,8 @@ import javafx.stage.Stage;
 import javafx.stage.StageStyle;
 import design.animation;
 
+import java.io.IOException;
+import java.net.Socket;
 import java.util.Map;
 import java.util.Optional;
 
@@ -82,7 +84,11 @@ public class MultiplayerDialog {
 
         joinButton.setOnAction(e -> {
             animator.playButtonPressAnimation(joinButton);
-            joinGame();
+            try {
+                joinGame();
+            } catch (IOException ex) {
+                throw new RuntimeException(ex);
+            }
         });
 
         cancelButton.setOnAction(e -> {
@@ -110,11 +116,16 @@ public class MultiplayerDialog {
         multiplayerManager.startLocalServer();
         multiplayerManager.setAsHost(null); // Pass null as we'll create the server socket in startLocalServer
         
-        // Close the multiplayer dialog
+        // Afficher l'interface "Play with friends"
+        PlayWithFriendsDialog playDialog = new PlayWithFriendsDialog(primaryStage, () -> {
+            multiplayerManager.startMultiplayerGame();
+        });
+        playDialog.show();
+
         dialog.close();
     }
 
-    private void joinGame() {
+    private void joinGame() throws IOException {
         // Create input dialog for IP
         TextInputDialog ipDialog = new TextInputDialog();
         ipDialog.setTitle("Join Game");
@@ -130,7 +141,42 @@ public class MultiplayerDialog {
         Optional<String> result = ipDialog.showAndWait();
         if (result.isPresent() && !result.get().isEmpty()) {
             String hostIP = result.get();
-
+            MultiplayerManager multiplayerManager = new MultiplayerManager(primaryStage, "Client");
+            multiplayerManager.setAsClient(new Socket(hostIP, GameConstants.PORT));
+            PlayWithFriendsDialog playDialog = new PlayWithFriendsDialog(primaryStage, () -> {
+                multiplayerManager.startMultiplayerGame();
+            });
+            playDialog.show();
+            dialog.close();
         }
+    }
+}
+
+ class PlayWithFriendsDialog {
+    private Stage dialog;
+    private Runnable onStartGame;
+
+    public PlayWithFriendsDialog(Stage owner, Runnable onStartGame) {
+        this.onStartGame = onStartGame;
+        dialog = new Stage();
+        dialog.initOwner(owner);
+        dialog.initModality(Modality.APPLICATION_MODAL);
+
+        VBox vbox = new VBox(20);
+        vbox.setAlignment(Pos.CENTER);
+
+        Label label = new Label("Play with friends");
+        Button startBtn = new Button("START GAME");
+        startBtn.setOnAction(e -> {
+            dialog.close();
+            if (onStartGame != null) onStartGame.run();
+        });
+
+        vbox.getChildren().addAll(label, startBtn);
+        dialog.setScene(new Scene(vbox, 300, 150));
+    }
+
+    public void show() {
+        dialog.showAndWait();
     }
 }

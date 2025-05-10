@@ -274,6 +274,7 @@ public class MultiplayerManager {
         remotePlayer = playerClass.createMultiplayerPlayer(true);
         remotePlayer.setX(WINDOW_WIDTH / 2 - remotePlayer.getFitWidth() / 2);
         remotePlayer.setY(100);
+        remotePlayer.setRotate(180);
         remotePlayer.setVisible(true);
 
         // Make opponent ship clearly visible
