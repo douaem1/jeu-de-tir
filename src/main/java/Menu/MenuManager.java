@@ -236,7 +236,7 @@ public class MenuManager {
     }
 
     public void returnToMenu() {
-        gamemanager.stopGame();
+        //gamemanager.stopGame();
         gamemanager.setupMainMenu();
     }
     // Modifications for MenuManager.java class

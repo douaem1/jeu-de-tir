@@ -28,7 +28,7 @@ public class JeuDeTir extends Application {
     @Override
     public void stop() {
         if (gameManager != null) {
-            gameManager.stopGame();
+           // gameManager.stopGame();
         }
         System.out.println("Application arrêtée");
     }

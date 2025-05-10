@@ -7,6 +7,7 @@ import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
@@ -706,11 +707,53 @@ public class MultiplayerManager {
     public void startLocalServer() {
         try {
             System.out.println("Starting local game server...");
-            new GameServer().start();
-            Thread.sleep(500);
-            System.out.println("Local server started");
-        } catch (Exception e) {
+            ServerSocket serverSocket = new ServerSocket(GameConstants.PORT);
+            this.isHost = true;
+            this.serverAddress = "localhost";
+            
+            // Show waiting message
+            Platform.runLater(() -> {
+                Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                alert.setTitle("Waiting for Connection");
+                alert.setHeaderText("Server Started");
+                alert.setContentText("Waiting for another player to connect via Radmin VPN.\nMake sure both players are connected to the same Radmin network.");
+                alert.show();
+            });
+
+            // Accept connection in a separate thread
+            new Thread(() -> {
+                try {
+                    System.out.println("Waiting for client connection...");
+                    socket = serverSocket.accept();
+                    serverSocket.close();
+                    
+                    // Setup streams
+                    out = new PrintWriter(socket.getOutputStream(), true);
+                    in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                    
+                    // Start network listener
+                    startNetworkListener();
+                    
+                    // Start the game
+                    Platform.runLater(() -> {
+                        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                        alert.setTitle("Connection Established");
+                        alert.setHeaderText("Player Connected");
+                        alert.setContentText("Another player has joined your game!");
+                        alert.show();
+                        
+                        startMultiplayerGame();
+                    });
+                    
+                } catch (IOException e) {
+                    System.err.println("Error accepting client connection: " + e.getMessage());
+                    Platform.runLater(() -> showError("Connection Error", "Failed to accept client connection: " + e.getMessage()));
+                }
+            }).start();
+            
+        } catch (IOException e) {
             System.err.println("Error starting local server: " + e.getMessage());
+            Platform.runLater(() -> showError("Server Error", "Failed to start local server: " + e.getMessage()));
         }
     }
 

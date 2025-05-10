@@ -21,11 +21,14 @@ import design.design;
 import design.*;
 import Menu.MenuManager;
 import Menu.Authentification;
+import chat_Client_Serveur.NetworkManager;
 
 public class GameManager {
     public Stage primaryStage;
     private MenuManager menuManager;
     private Authentification auth;
+    private NetworkManager networkManager;
+    private int gameMode = GameConstants.SINGLE_PLAYER; // Default mode
 
     // Configuration
     public static final int WINDOW_WIDTH = 1200;
@@ -43,6 +46,7 @@ public class GameManager {
 
     // Éléments du jeu
     public ImageView player;
+    public ImageView opponentPlayer; // For multiplayer
     public CopyOnWriteArrayList<ImageView> enemies = new CopyOnWriteArrayList<>();
     public CopyOnWriteArrayList<Animation> activeAnimations = new CopyOnWriteArrayList<>();
     public int score = 0;
@@ -57,6 +61,7 @@ public class GameManager {
     public Label healthLabel;
     public Label ammoLabel;
     public Label notificationLabel;
+    public Label multiplayerStatusLabel; // NEW: Status for multiplayer
 
     // Variables de contrôle du mouvement
     public volatile boolean movingLeft = false;
@@ -71,13 +76,16 @@ public class GameManager {
     public ExecutorService gameExecutor = Executors.newFixedThreadPool(3);
     public volatile boolean gameRunning = false;
 
-    // Chat
+    // Game components
     public Socket socket;
     public PrintWriter out;
-    public TextArea chatArea;
     public String selectedAircraft;
 
     public GameManager() {
+        // Default constructor
+    }
+
+    public GameManager(Stage primaryStage) {
         this.primaryStage = primaryStage;
     }
 
@@ -85,7 +93,15 @@ public class GameManager {
         this.primaryStage = primaryStage;
     }
 
-    public  void setupMainMenu() {
+    public void setNetworkManager(NetworkManager networkManager) {
+        this.networkManager = networkManager;
+    }
+
+    public void setGameMode(int gameMode) {
+        this.gameMode = gameMode;
+    }
+
+    public void setupMainMenu() {
         try {
             // Création d'un nouveau root
             StackPane root = new StackPane();
@@ -128,8 +144,7 @@ public class GameManager {
         gamepane.getChildren().add(hud.hudContainer);
     }
 
-    // In GameManager.java, modify the startGame method:
-// Dans le GameManager, remplacez la méthode startGame() comme ceci:
+    // Modified startGame method to support multiplayer
     public void startGame(String selectedAircraft) {
         this.selectedAircraft = selectedAircraft;
 
@@ -153,9 +168,25 @@ public class GameManager {
                 player = playerClass.createPlayer();
                 gamepane.getChildren().add(player);
 
+                // Setup multiplayer if needed
+                if (gameMode != GameConstants.SINGLE_PLAYER) {
+                    setupMultiplayerComponents();
+                }
+
                 // IMPORTANT: Initialiser le HUD avec une référence à ce GameManager
                 hud = new HUD();
                 hud.setupHUD();
+
+                // Add multiplayer status to HUD if in multiplayer mode
+                if (gameMode != GameConstants.SINGLE_PLAYER) {
+                    multiplayerStatusLabel = new Label(gameMode == GameConstants.MULTIPLAYER_HOST ?
+                            "HOSTING" : "CONNECTED");
+                    multiplayerStatusLabel.setTextFill(COLORS.get("ACCENT"));
+                    multiplayerStatusLabel.setFont(Font.font(FONT_FAMILIES[0], FontWeight.BOLD, 18));
+                    hud.hudContainer.setRight(multiplayerStatusLabel);
+                    BorderPane.setAlignment(multiplayerStatusLabel, Pos.TOP_RIGHT);
+                    BorderPane.setMargin(multiplayerStatusLabel, new Insets(15, 20, 0, 0));
+                }
 
                 // S'assurer que la référence au scoreLabel est disponible
                 scoreLabel = hud.scoreLabel;
@@ -175,76 +206,110 @@ public class GameManager {
                 setupEnemySpawning();
                 startGameThreads();
 
-                System.out.println("Game started successfully");
+                // Start network listening thread if in multiplayer mode
+                if (gameMode != GameConstants.SINGLE_PLAYER && networkManager != null) {
+                    startNetworkThread();
+                }
+
+                System.out.println("Game started successfully in mode: " +
+                        (gameMode == GameConstants.SINGLE_PLAYER ? "Single Player" :
+                                gameMode == GameConstants.MULTIPLAYER_HOST ? "Multiplayer (Host)" : "Multiplayer (Client)"));
+
             } catch (Exception e) {
                 e.printStackTrace();
-                System.err.println("Critical error launching game: " + e.getMessage());
-                setupMainMenu();
+                System.err.println("Error starting game: " + e.getMessage());
+
+                // Notify the user
+                showError("Game Error", "Could not start the game", e.getMessage());
             }
         });
     }
-    // Et remplacez la méthode setupControls() comme ceci:
-    public void setupControls() {
-        gamepane.setFocusTraversable(true);
-        gamepane.requestFocus();
 
-        // Création d'une instance de Player unique pour gérer les tirs
-        Player playerClass = new Player(this);  // Passer THIS comme référence
+    private void showError(String title, String header, String content) {
+        Platform.runLater(() -> {
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle(title);
+            alert.setHeaderText(header);
+            alert.setContentText(content);
+            alert.showAndWait();
+        });
+    }
 
+    private void setupMultiplayerComponents() {
+        // Create opponent player representation
+        opponentPlayer = new ImageView();
+        opponentPlayer.setImage(new Image(getClass().getResourceAsStream("/opponent_aircraft.png")));
+        opponentPlayer.setFitWidth(80);
+        opponentPlayer.setFitHeight(80);
+        opponentPlayer.setPreserveRatio(true);
+        opponentPlayer.setLayoutX(WINDOW_WIDTH - 200);
+        opponentPlayer.setLayoutY(WINDOW_HEIGHT / 2);
+        opponentPlayer.setVisible(false); // Initially hidden until sync
+
+        gamepane.getChildren().add(opponentPlayer);
+
+        System.out.println("Multiplayer components initialized");
+    }
+
+    private void setupControls() {
         gamepane.setOnKeyPressed(e -> {
-            if (!gameRunning) return;
-
-            double speed = 8;
             switch (e.getCode()) {
-                case LEFT:
-                    player.setX(Math.max(0, player.getX() - speed));
-                    break;
-                case RIGHT:
-                    player.setX(Math.min(WINDOW_WIDTH - player.getFitWidth(), player.getX() + speed));
-                    break;
-                case UP:
-                    player.setY(Math.max(0, player.getY() - speed));
-                    break;
-                case DOWN:
-                    player.setY(Math.min(WINDOW_HEIGHT - player.getFitHeight(), player.getY() + speed));
-                    break;
-                case SPACE:
-                    System.out.println("Space key pressed - firing laser");
-                    // Use the playerClass instance instead of creating a null one
-                    playerClass.fireEnhancedLaser(gamepane, player);
-                    break;
-                case ESCAPE:
-                    stopGame();
-                    setupMainMenu();
-                    break;
+                case LEFT:  case A: movingLeft = true; break;
+                case RIGHT: case D: movingRight = true; break;
+                case UP:    case W: movingUp = true; break;
+                case DOWN:  case S: movingDown = true; break;
+                case SPACE: firing = true; break;
+                case ESCAPE: pauseGame(); break;
+                default: break;
+            }
+        });
+
+        gamepane.setOnKeyReleased(e -> {
+            switch (e.getCode()) {
+                case LEFT:  case A: movingLeft = false; break;
+                case RIGHT: case D: movingRight = false; break;
+                case UP:    case W: movingUp = false; break;
+                case DOWN:  case S: movingDown = false; break;
+                case SPACE: firing = false; break;
+                default: break;
             }
         });
     }
-
-// Also modify the setupEnemySpawning method to add CSS class to enemies:
 
     private void setupEnemySpawning() {
-        Timeline enemySpawner = new Timeline(
-                new KeyFrame(Duration.seconds(2), event -> {
-                    if (!gameRunning) return;
+        gameExecutor.submit(() -> {
+            Random random = new Random();
+            try {
+                while (gameRunning) {
+                    if (enemies.size() < 10) { // Limit the number of enemies
+                        Platform.runLater(() -> {
+                            try {
+                                // Create a new enemy
+                                Enemy enemyClass = new Enemy(this);
+                                ImageView enemy = enemyClass.createEnemyAirplane();
 
-                    Enemy enemy1 = new Enemy();
-                    ImageView enemy = enemy1.createEnemyAirplane();
-                    if (gamepane != null && enemy != null) {
-                        // Add CSS class for identification
-                        enemy.getStyleClass().add("enemy-ship");
+                                // Add enemy to scene and list
+                                gamepane.getChildren().add(enemy);
+                                enemies.add(enemy);
 
-                        gamepane.getChildren().add(enemy);
-                        enemies.add(enemy);
-                        animateEnemy(enemy);
+                                // Animate the enemy
+                                TranslateTransition transition = animateEnemy(enemy);
+                                activeAnimations.add(transition);
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
+                        });
                     }
+
+                    // Delay between enemy spawns - random between 1-3 seconds
+                    Thread.sleep(1000 + random.nextInt(2000));
                 }
-                ));
-        enemySpawner.setCycleCount(Animation.INDEFINITE);
-        enemySpawner.play();
-        activeAnimations.add(enemySpawner);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
     }
-    public void animateEnemy(ImageView enemy) {
+    public TranslateTransition animateEnemy(ImageView enemy) {
         Timeline animation = new Timeline(
                 new KeyFrame(Duration.millis(8), e -> {
                     if (!gameRunning) return;
@@ -265,8 +330,8 @@ public class GameManager {
         animation.setCycleCount(Animation.INDEFINITE);
         animation.play();
         activeAnimations.add(animation);
+        return null;
     }
-
     private void checkPlayerCollision(ImageView enemy) {
         if (player != null && enemy.getBoundsInParent().intersects(player.getBoundsInParent())) {
             handlePlayerHit();
@@ -278,7 +343,6 @@ public class GameManager {
             });
         }
     }
-
     private void handlePlayerHit() {
         lives--;
         HUD hud = new HUD();
@@ -296,195 +360,324 @@ public class GameManager {
         }
     }
 
-    private void gameOver(Pane gamePane) {
-        gameRunning = false;
-        design design = new design();
-        animation animation = new animation();
-        stopAllAnimations();
 
-        // Création du conteneur Game Over
-        VBox gameOverBox = new VBox(20);
-        gameOverBox.setAlignment(Pos.CENTER);
-        gameOverBox.setStyle("-fx-background-color: rgba(0,0,0,0.8); -fx-background-radius: 15;");
-        gameOverBox.setPadding(new Insets(40));
-
-        // Titre Game Over
-        Label title = new Label("GAME OVER");
-        title.setFont(Font.font(FONT_FAMILIES[0], FontWeight.EXTRA_BOLD, 56));
-        title.setTextFill(COLORS.get("LIGHT"));
-
-        // Affichage du score
-        Label scoreLabel = new Label("Final Score: " + score);
-        scoreLabel.setFont(Font.font(FONT_FAMILIES[1], FontWeight.BOLD, 24));
-        scoreLabel.setTextFill(COLORS.get("LIGHT"));
-
-        // Bouton Play Again
-        Button restartBtn = animation.createActionButton("PLAY AGAIN", "PRIMARY");
-        restartBtn.setPrefWidth(200);
-        restartBtn.setOnAction(e -> {
-            // Nettoyage complet avant de recommencer
-            gamePane.getChildren().clear();
-            enemies.clear();
-            activeAnimations.clear();
-            score = 0;
-            lives = 3;
-            gameRunning = true;
-
-            // Transition fluide
-            FadeTransition fadeOut = new FadeTransition(Duration.millis(300), gameOverBox);
-            fadeOut.setFromValue(1.0);
-            fadeOut.setToValue(0.0);
-            fadeOut.setOnFinished(event -> {
-
-                startGame(selectedAircraft);
-            });
-            fadeOut.play();
-        });
-
-        // Bouton Main Menu
-        Button menuBtn = animation.createActionButton("MAIN MENU", "SECONDARY");
-        menuBtn.setPrefWidth(200);
-        menuBtn.setOnAction(e -> {
-            // Nettoyage complet avant de retourner au menu
-            gamePane.getChildren().clear();
-            enemies.clear();
-            activeAnimations.clear();
-            score = 0;
-            lives = 3;
-
-            // Transition fluide
-            FadeTransition fadeOut = new FadeTransition(Duration.millis(300), gameOverBox);
-            fadeOut.setFromValue(1.0);
-            fadeOut.setToValue(0.0);
-            fadeOut.setOnFinished(event -> {
-                setupMainMenu();
-            });
-            fadeOut.play();
-        });
-
-        // Assemblage des éléments
-        gameOverBox.getChildren().addAll(title, scoreLabel, restartBtn, menuBtn);
-        gameOverBox.setOpacity(0);
-
-        // Création de l'overlay
-        StackPane overlay = new StackPane(gameOverBox);
-        overlay.setAlignment(Pos.CENTER);
-        overlay.setStyle("-fx-background-color: rgba(0,0,0,0.5);");
-        gamePane.getChildren().add(overlay);
-
-        // Animation d'apparition
-        FadeTransition fadeIn = new FadeTransition(Duration.seconds(0.8), gameOverBox);
-        fadeIn.setToValue(1);
-
-        ScaleTransition scaleIn = new ScaleTransition(Duration.seconds(0.5), gameOverBox);
-        scaleIn.setFromX(0.8);
-        scaleIn.setFromY(0.8);
-        scaleIn.setToX(1.0);
-        scaleIn.setToY(1.0);
-
-        ParallelTransition entrance = new ParallelTransition(fadeIn, scaleIn);
-        entrance.play();
-        activeAnimations.add(entrance);
-    }
-
-    public void checkLaserCollisions(Pane gamePane, Rectangle laser) {
-        enemies.removeIf(enemy -> {
-            if (laser.getBoundsInParent().intersects(enemy.getBoundsInParent())) {
-                Platform.runLater(() -> {
-                    gamePane.getChildren().removeAll(laser, enemy);
-                    createExplosion(enemy.getX() + enemy.getFitWidth()/2,
-                            enemy.getY() + enemy.getFitHeight()/2);
-
-                    // Mettre à jour le score
-                    score += 10;
-                    if (scoreLabel != null) {
-                        scoreLabel.setText("SCORE: " + score);
+    private void startGameThreads() {
+        // Movement thread
+        gameExecutor.submit(() -> {
+            try {
+                while (gameRunning) {
+                    updatePlayerPosition();
+                    // Send position to network in multiplayer mode
+                    if (gameMode != GameConstants.SINGLE_PLAYER && networkManager != null) {
+                        sendPositionUpdate();
                     }
-                });
-                return true;
+                    Thread.sleep(16); // ~60 FPS
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
-            return false;
+        });
+
+        // Firing thread
+        gameExecutor.submit(() -> {
+            try {
+                while (gameRunning) {
+                    if (firing) {
+                        Platform.runLater(this::fireLaser);
+                    }
+                    Thread.sleep(200); // Fire rate limiter
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+
+        // Collision detection thread
+        gameExecutor.submit(() -> {
+            try {
+                while (gameRunning) {
+                    Platform.runLater(this::detectCollisions);
+                    Thread.sleep(32); // 30 times per second
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         });
     }
 
-    public void updateGameState() {
-        try {
-            Enemy enemy = new Enemy();
-            enemy.updateEnemies();
-            HUD hud = new HUD();
-            hud.updateHUD();
-        } catch (Exception e) {
-            System.err.println("Erreur dans updateGameState: " + e.getMessage());
-        }
-    }
-
-    private void stopAllAnimations() {
-        for (Animation animation : activeAnimations) {
-            if (animation != null) {
-                animation.stop();
+    private void startNetworkThread() {
+        gameExecutor.submit(() -> {
+            try {
+                while (gameRunning && networkManager != null && networkManager.isConnected()) {
+                    Object data = networkManager.receiveData();
+                    if (data != null) {
+                        handleNetworkData(data);
+                    }
+                    Thread.sleep(16); // Check for updates ~60 times per second
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
-        }
-        activeAnimations.clear();
+        });
     }
 
-    public void stopGame() {
+    private void sendPositionUpdate() {
+        if (player != null && networkManager != null) {
+            PlayerData data = new PlayerData();
+            data.x = player.getLayoutX();
+            data.y = player.getLayoutY();
+            data.isFiring = firing;
+
+            networkManager.sendData(data);
+        }
+    }
+
+    private void handleNetworkData(Object data) {
+        if (data instanceof PlayerData) {
+            Platform.runLater(() -> {
+                PlayerData playerData = (PlayerData) data;
+                if (opponentPlayer != null) {
+                    opponentPlayer.setLayoutX(playerData.x);
+                    opponentPlayer.setLayoutY(playerData.y);
+                    opponentPlayer.setVisible(true);
+
+                    if (playerData.isFiring) {
+                        fireOpponentLaser();
+                    }
+                }
+            });
+        }
+    }
+
+    private void updatePlayerPosition() {
+        if (!gameRunning) return;
+
+        Platform.runLater(() -> {
+            if (player == null) return;
+
+            double newX = player.getLayoutX();
+            double newY = player.getLayoutY();
+
+            if (movingLeft) newX -= PLAYER_SPEED;
+            if (movingRight) newX += PLAYER_SPEED;
+            if (movingUp) newY -= PLAYER_SPEED;
+            if (movingDown) newY += PLAYER_SPEED;
+
+            // Keep player within bounds
+            newX = Math.max(0, Math.min(WINDOW_WIDTH - player.getFitWidth(), newX));
+            newY = Math.max(0, Math.min(WINDOW_HEIGHT - player.getFitHeight(), newY));
+
+            player.setLayoutX(newX);
+            player.setLayoutY(newY);
+        });
+    }
+
+    private void fireLaser() {
+        if (player == null) return;
+
+        // Create laser visual
+        Rectangle laser = new Rectangle(5, 20, COLORS.get("DANGER"));
+        laser.setArcWidth(5);
+        laser.setArcHeight(5);
+
+        // Position at player's position
+        laser.setLayoutX(player.getLayoutX() + player.getFitWidth()/2);
+        laser.setLayoutY(player.getLayoutY());
+
+        // Add glow effect
+        Glow glow = new Glow();
+        glow.setLevel(0.8);
+        laser.setEffect(glow);
+
+        // Add to scene
+        gamepane.getChildren().add(laser);
+
+        // Animate the laser
+        TranslateTransition laserAnimation = new TranslateTransition(Duration.seconds(1), laser);
+        laserAnimation.setByY(-WINDOW_HEIGHT);
+        laserAnimation.setOnFinished(e -> {
+            gamepane.getChildren().remove(laser);
+        });
+
+        laserAnimation.play();
+        activeAnimations.add(laserAnimation);
+    }
+
+    private void fireOpponentLaser() {
+        if (opponentPlayer == null) return;
+
+        // Create laser visual
+        Rectangle laser = new Rectangle(5, 20, COLORS.get("ACCENT"));
+        laser.setArcWidth(5);
+        laser.setArcHeight(5);
+
+        // Position at opponent's position
+        laser.setLayoutX(opponentPlayer.getLayoutX() + opponentPlayer.getFitWidth()/2);
+        laser.setLayoutY(opponentPlayer.getLayoutY() + opponentPlayer.getFitHeight());
+
+        // Add glow effect
+        Glow glow = new Glow();
+        glow.setLevel(0.8);
+        laser.setEffect(glow);
+
+        // Add to scene
+        gamepane.getChildren().add(laser);
+
+        // Animate the laser
+        TranslateTransition laserAnimation = new TranslateTransition(Duration.seconds(1), laser);
+        laserAnimation.setByY(WINDOW_HEIGHT);
+        laserAnimation.setOnFinished(e -> {
+            gamepane.getChildren().remove(laser);
+        });
+
+        laserAnimation.play();
+        activeAnimations.add(laserAnimation);
+    }
+
+    private void detectCollisions() {
+        // Implementation of collision detection
+        // Would check for intersection between lasers and enemies/players
+    }
+
+    public void updateScore(int points) {
+        score += points;
+        Platform.runLater(() -> {
+            if (scoreLabel != null) {
+                scoreLabel.setText("SCORE: " + score);
+            }
+        });
+    }
+
+    public void updateLives(int change) {
+        lives += change;
+
+        Platform.runLater(() -> {
+            if (healthLabel != null) {
+                healthLabel.setText("LIVES: " + lives);
+            }
+
+            if (healthBar != null) {
+                healthBar.setProgress(lives / 3.0);
+            }
+
+            if (lives <= 0) {
+                gameOver(gamepane);
+            }
+        });
+    }
+
+    public void pauseGame() {
+        // Implementation of pause functionality
         gameRunning = false;
-        gameExecutor.shutdownNow();
-        try {
-            if (!gameExecutor.awaitTermination(800, TimeUnit.MILLISECONDS)) {
-                gameExecutor.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            gameExecutor.shutdownNow();
-        }
+
+        Platform.runLater(() -> {
+            // Create pause menu
+            VBox pauseMenu = new VBox(10);
+            pauseMenu.setAlignment(Pos.CENTER);
+            pauseMenu.setBackground(new Background(new BackgroundFill(
+                    Color.rgb(0, 0, 0, 0.7), CornerRadii.EMPTY, Insets.EMPTY)));
+            pauseMenu.setPrefSize(300, 200);
+            pauseMenu.setLayoutX((WINDOW_WIDTH - 300) / 2);
+            pauseMenu.setLayoutY((WINDOW_HEIGHT - 200) / 2);
+
+            Label pauseLabel = new Label("GAME PAUSED");
+            pauseLabel.setFont(Font.font(FONT_FAMILIES[0], FontWeight.BOLD, 24));
+            pauseLabel.setTextFill(COLORS.get("LIGHT"));
+
+            Button resumeButton = new Button("RESUME");
+            resumeButton.setOnAction(e -> resumeGame());
+
+            Button exitButton = new Button("EXIT TO MENU");
+            exitButton.setOnAction(e -> exitToMenu());
+
+            pauseMenu.getChildren().addAll(pauseLabel, resumeButton, exitButton);
+            gamepane.getChildren().add(pauseMenu);
+        });
+    }
+
+    public void resumeGame() {
+        gameRunning = true;
+
+        Platform.runLater(() -> {
+            // Remove pause menu
+            gamepane.getChildren().removeIf(node -> node instanceof VBox &&
+                    ((VBox) node).getChildren().stream()
+                            .anyMatch(child -> child instanceof Label &&
+                                    ((Label) child).getText().equals("GAME PAUSED")));
+            gamepane.requestFocus();
+        });
+    }
+
+    public void gameOver(Pane gamepane) {
+        gameRunning = false;
+
+        Platform.runLater(() -> {
+            // Create game over screen
+            VBox gameOverMenu = new VBox(10);
+            gameOverMenu.setAlignment(Pos.CENTER);
+            gameOverMenu.setBackground(new Background(new BackgroundFill(
+                    Color.rgb(0, 0, 0, 0.8), CornerRadii.EMPTY, Insets.EMPTY)));
+            gameOverMenu.setPrefSize(400, 300);
+            gameOverMenu.setLayoutX((WINDOW_WIDTH - 400) / 2);
+            gameOverMenu.setLayoutY((WINDOW_HEIGHT - 300) / 2);
+
+            Label gameOverLabel = new Label("GAME OVER");
+            gameOverLabel.setFont(Font.font(FONT_FAMILIES[0], FontWeight.BOLD, 36));
+            gameOverLabel.setTextFill(COLORS.get("DANGER"));
+
+            Label finalScoreLabel = new Label("FINAL SCORE: " + score);
+            finalScoreLabel.setFont(Font.font(FONT_FAMILIES[0], FontWeight.BOLD, 24));
+            finalScoreLabel.setTextFill(COLORS.get("LIGHT"));
+
+            Button restartButton = new Button("RESTART");
+            restartButton.setOnAction(e -> restartGame());
+
+            Button exitButton = new Button("EXIT TO MENU");
+            exitButton.setOnAction(e -> exitToMenu());
+
+            gameOverMenu.getChildren().addAll(gameOverLabel, finalScoreLabel, restartButton, exitButton);
+            GameManager.gamepane.getChildren().add(gameOverMenu);
+        });
+    }
+
+    private void restartGame() {
+        // Clean up
+        cleanup();
+
+        // Start a new game
+        startGame(selectedAircraft);
+    }
+
+    private void exitToMenu() {
+        // Clean up
+        cleanup();
+
+        // Go back to main menu
+        setupMainMenu();
+    }
+
+    public void cleanup() {
+        // Stop all game threads
+        gameRunning = false;
+
+        // Stop and clear all animations
         Platform.runLater(() -> {
             activeAnimations.forEach(Animation::stop);
             activeAnimations.clear();
-            if (gamepane != null) gamepane.getChildren().clear();
         });
-    }
 
-    private void createExplosion(double x, double y) {
-        Circle explosion = new Circle(x, y, 0, Color.ORANGERED);
-        explosion.setEffect(new Glow(0.8));
-        gamepane.getChildren().add(explosion);
-
-        Timeline timeline = new Timeline(
-                new KeyFrame(Duration.ZERO, new KeyValue(explosion.radiusProperty(), 0)),
-                new KeyFrame(Duration.millis(500), new KeyValue(explosion.radiusProperty(), 30)),
-                new KeyFrame(Duration.millis(500), new KeyValue(explosion.opacityProperty(), 0))
-        );
-        timeline.setOnFinished(e -> gamepane.getChildren().remove(explosion));
-        timeline.play();
-    }
-
-    public void startGameThreads() {
-        // S'assurer que l'exécuteur n'est pas déjà fermé
-        if (gameExecutor.isShutdown()) {
-            gameExecutor = Executors.newFixedThreadPool(3);
+        // Close network connection if in multiplayer mode
+        if (gameMode != GameConstants.SINGLE_PLAYER && networkManager != null) {
+            networkManager.close();
         }
-
-        // Thread de mise à jour du jeu
-        gameExecutor.submit(() -> {
-            while (gameRunning) {
-                try {
-                    Platform.runLater(this::updateGameState);
-                    Thread.sleep(16);
-                } catch (InterruptedException e) {
-                    break;
-                } catch (Exception e) {
-                    System.err.println("Erreur dans le thread de mise à jour: " + e.getMessage());
-                }
-            }
-        });
     }
-    public void startMultiplayerGame(String username) {
-        stopGame(); // Stop any existing game
 
-        // Create and initialize multiplayer manager
-        MultiplayerManager multiplayerManager = new MultiplayerManager(primaryStage, username);
 
-        // Start the multiplayer game
-        multiplayerManager.startMultiplayerGame();
+    // Inner class for network data
+    public static class PlayerData implements Serializable {
+        private static final long serialVersionUID = 1L;
+        public double x;
+        public double y;
+        public boolean isFiring;
     }
 }

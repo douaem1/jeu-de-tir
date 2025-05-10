@@ -3,11 +3,20 @@ package Game;
 import javafx.animation.*;
 import javafx.application.Platform;
 import javafx.scene.SnapshotParameters;
+import javafx.scene.control.ProgressBar;
+import javafx.scene.effect.Glow;
 import javafx.scene.image.*;
+import javafx.scene.image.Image;
 import javafx.scene.layout.*;
 import javafx.scene.paint.*;
+import javafx.scene.paint.Color;
 import javafx.scene.shape.*;
+import javafx.scene.shape.Rectangle;
 import javafx.util.Duration;
+
+import java.awt.*;
+import java.util.ArrayList;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class Player {
     // Référence directe au GameManager parent
@@ -62,7 +71,7 @@ public class Player {
 
                     // Vérification des collisions
                     if (gameManager != null) {
-                        gameManager.checkLaserCollisions(gamePane, laser);
+                        checkLaserCollisions(gamePane, laser);
                     }
 
                     // Suppression du laser s'il sort de l'écran
@@ -83,6 +92,7 @@ public class Player {
         }
     }
 
+
     public ImageView createPlayer() {
         return createPlayerWithImage(false, 0);
     }
@@ -90,6 +100,52 @@ public class Player {
     // Nouvelle méthode pour créer un joueur pour le mode multijoueur
     public ImageView createMultiplayerPlayer(boolean isOpponent) {
         return createPlayerWithImage(true, isOpponent ? 180 : 0);
+    }
+    public ImageView player;
+    public CopyOnWriteArrayList<ImageView> enemies = new CopyOnWriteArrayList<>();
+    public CopyOnWriteArrayList<Animation> activeAnimations = new CopyOnWriteArrayList<>();
+    public int score = 0;
+    public int lives = 3;
+    public static Pane gamepane;
+    public BorderPane hudContainer;
+    public Label scoreLabel;
+    public Label levelLabel;
+    public ProgressBar healthBar;
+    public Label healthLabel;
+    public Label ammoLabel;
+    public Label notificationLabel;
+    public void checkLaserCollisions(Pane gamePane, Rectangle laser) {
+
+        enemies.removeIf(enemy -> {
+            if (laser.getBoundsInParent().intersects(enemy.getBoundsInParent())) {
+                Platform.runLater(() -> {
+                    gamePane.getChildren().removeAll(laser, enemy);
+                    createExplosion(enemy.getX() + enemy.getFitWidth()/2,
+                            enemy.getY() + enemy.getFitHeight()/2);
+
+                    // Mettre à jour le score
+                    score += 10;
+                    if (scoreLabel != null) {
+                        scoreLabel.setText("SCORE: " + score);
+                    }
+                });
+                return true;
+            }
+            return false;
+        });
+    }
+    private void createExplosion(double x, double y) {
+        Circle explosion = new Circle(x, y, 0, Color.ORANGERED);
+        explosion.setEffect(new Glow(0.8));
+        gamepane.getChildren().add(explosion);
+
+        Timeline timeline = new Timeline(
+                new KeyFrame(Duration.ZERO, new KeyValue(explosion.radiusProperty(), 0)),
+                new KeyFrame(Duration.millis(500), new KeyValue(explosion.radiusProperty(), 30)),
+                new KeyFrame(Duration.millis(500), new KeyValue(explosion.opacityProperty(), 0))
+        );
+        timeline.setOnFinished(e -> gamepane.getChildren().remove(explosion));
+        timeline.play();
     }
 
     private ImageView createPlayerWithImage(boolean isMultiplayer, double rotation) {
@@ -128,6 +184,7 @@ public class Player {
                 player.setRotate(rotation);
             }
 
+
             // Pour le débogage
             System.out.println("Player created with rotation: " + rotation);
 
@@ -165,5 +222,48 @@ public class Player {
                 System.out.println("Unknown aircraft: " + aircraftName + ", using default");
                 return "/airplane.png";  // Option par défaut
         }
+    }
+    class player {
+        private String name;
+        private String aircraftType;
+        private Image image;
+        private double x, y;
+        private int score;
+        private int lives;
+        private boolean isHost;
+
+
+        public player(String name, String aircraftType, boolean isHost) {
+            this.name = name;
+            this.aircraftType = aircraftType;
+            this.isHost = isHost;
+            this.lives = GameConstants.MAX_LIVES;
+            loadImage();
+        }
+
+        private void loadImage() {
+            try {
+                this.image = new Image(getClass().getResourceAsStream(
+                        "/images/" + aircraftType + ".png"));
+            } catch (Exception e) {
+                // Image par défaut si problème
+                this.image = new Image(getClass().getResourceAsStream(
+                        "/images/default_aircraft.png"));
+            }
+        }
+
+        // Getters et setters
+        public Image getImage() { return image; }
+        public double getX() { return x; }
+        public void setX(double x) { this.x = x; }
+        public double getY() { return y; }
+        public void setY(double y) { this.y = y; }
+        public int getScore() { return score; }
+        public void addScore(int points) { score += points; }
+        public int getLives() { return lives; }
+        public void loseLife() { lives--; }
+        public boolean isAlive() { return lives > 0; }
+        public String getName() { return name; }
+        public boolean isHost() { return isHost; }
     }
 }

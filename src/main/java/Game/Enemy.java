@@ -29,6 +29,10 @@ import static Game.GameManager.*;
 
 public class Enemy {
     private Stage primaryStage;
+
+    public Enemy(GameManager gameManager) {
+    }
+
     public void setPrimaryStage(Stage primaryStage) {
         this.primaryStage = primaryStage;
     }
